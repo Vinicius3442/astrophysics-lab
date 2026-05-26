@@ -4,15 +4,15 @@
 class BlackHoleSimulation {
     constructor() {
         this.container = document.getElementById("blackhole-canvas-container");
-        this.isActive = false;
+        this.isActive = false; // Initialized inactive while on Lobby
         
         // Physics constants (normalized for GPU rendering where c = 1, G = 1)
-        this.mass = 10.0;          // Solar masses (M_sun)
-        this.accretionRate = 1.0;  // Disk brightness factor
+        this.mass = 12.0;          // Solar masses (M_sun)
+        this.accretionRate = 1.2;  // Disk brightness factor
         this.dopplerEffect = true; // Relativistic beaming toggle
         this.redshiftEffect = true;// Gravitational redshift toggle
         this.gravLensing = true;   // Deflection toggle
-        this.pitchAngle = 15.0;     // Tilt of camera in degrees
+        this.pitchAngle = 15.0;     // Initial pitch in degrees (synced with virtual camera)
         
         // Register in main laboratory scope
         window.AstrophysicsLab.simulations['blackhole'] = this;
@@ -53,9 +53,11 @@ class BlackHoleSimulation {
             this.valBright.textContent = this.accretionRate.toFixed(1);
         });
 
+        // The pitch slider now updates the virtual camera position smoothly
         this.sliderPitch.addEventListener("input", (e) => {
             this.pitchAngle = parseFloat(e.target.value);
             this.valPitch.textContent = Math.round(this.pitchAngle);
+            this.syncVirtualCameraToSliders();
         });
 
         this.toggleDoppler.addEventListener("change", (e) => {
@@ -86,32 +88,55 @@ class BlackHoleSimulation {
         const width = this.container.clientWidth;
         const height = this.container.clientHeight;
 
-        // WebGL2 support check
+        // Scene
         this.scene = new THREE.Scene();
-        this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
+        // 1. Rendering flat canvas camera
+        this.renderCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+        // 2. Interactive VIRTUAL perspective camera (OrbitControls rotates this!)
+        // Orbit and Zoom are driven by this camera and mapped into GLSL in real-time
+        this.virtualCamera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
+        
+        // Setup initial position matching pitch
+        this.syncVirtualCameraToSliders();
+
+        // WebGL Renderer
         this.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: "high-performance" });
         this.renderer.setSize(width, height);
-        this.renderer.setPixelRatio(1.0); // Shader performance is fill-rate limited, lock to 1.0
+        this.renderer.setPixelRatio(1.0); // Shader performance lock for stable framerate
         this.container.appendChild(this.renderer.domElement);
 
-        // Generate procedural galaxy background texture on the fly
+        // OrbitControls connected to the virtual camera and canvas element
+        this.controls = new THREE.OrbitControls(this.virtualCamera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.05;
+        this.controls.minDistance = 2.2; // Don't crash into the singularity
+        this.controls.maxDistance = 8.5; // Zoom out limit
+        this.controls.enablePan = false; // Keep centering Gargantua
+
+        // Generate high resolution starry background
         const bgTexture = this.generateCosmicTexture();
 
-        // Uniforms for passing parameters into GLSL Fragment Shader
+        // Shader parameters Uniforms
         this.uniforms = {
             u_resolution: { value: new THREE.Vector2(width, height) },
             u_time: { value: 0.0 },
-            u_rs: { value: 0.20 }, // Schwarzschild radius scaled for shader space
-            u_pitch: { value: 0.25 }, // Tilt in radians
-            u_accretion_rate: { value: 1.0 },
+            u_rs: { value: 0.20 }, // Schwarzschild Radius
+            u_accretion_rate: { value: 1.2 },
             u_doppler_enabled: { value: 1.0 },
             u_redshift_enabled: { value: 1.0 },
             u_lensing_enabled: { value: 1.0 },
-            u_bg_texture: { value: bgTexture }
+            u_bg_texture: { value: bgTexture },
+            
+            // Câmera virtual parameters passed to GPU
+            u_cam_pos: { value: new THREE.Vector3() },
+            u_cam_dir: { value: new THREE.Vector3() },
+            u_cam_up: { value: new THREE.Vector3() },
+            u_cam_right: { value: new THREE.Vector3() },
+            u_fov_scale: { value: 1.0 }
         };
 
-        // Custom Raymarching Fragment Shader
         const vertexShader = `
             varying vec2 vUv;
             void main() {
@@ -124,18 +149,24 @@ class BlackHoleSimulation {
             uniform vec2 u_resolution;
             uniform float u_time;
             uniform float u_rs;
-            uniform float u_pitch;
             uniform float u_accretion_rate;
             uniform float u_doppler_enabled;
             uniform float u_redshift_enabled;
             uniform float u_lensing_enabled;
             uniform sampler2D u_bg_texture;
             
+            // Virtual Camera projection vectors
+            uniform vec3 u_cam_pos;
+            uniform vec3 u_cam_dir;
+            uniform vec3 u_cam_up;
+            uniform vec3 u_cam_right;
+            uniform float u_fov_scale;
+            
             varying vec2 vUv;
 
-            // Simple 3D procedural noise for accretion disk dust texture
+            // 3D Procedural Noise for dynamic dust and gas accretion accretion
             float hash(vec3 p) {
-                p = fract(p * 0.3183099 + vec3(0.1, 0.1, 0.1));
+                p = fract(p * 0.3183099 + vec3(0.1));
                 p *= 17.0;
                 return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
             }
@@ -144,7 +175,6 @@ class BlackHoleSimulation {
                 vec3 i = floor(x);
                 vec3 f = fract(x);
                 f = f * f * (3.0 - 2.0 * f);
-                
                 return mix(
                     mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
                         mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
@@ -153,34 +183,17 @@ class BlackHoleSimulation {
                 );
             }
 
-            // Ray-plane intersection for the Accretion Disk
-            bool intersectDisk(vec3 ro, vec3 rd, out float t, out float distToCenter) {
-                // Plane equation: z = 0
-                if (abs(rd.z) < 1e-5) return false;
-                t = -ro.z / rd.z;
-                if (t < 0.0) return false;
-                
-                vec3 intersection = ro + rd * t;
-                distToCenter = length(intersection.xy);
-                return true;
-            }
-
             void main() {
-                // Normalize screen coordinates
+                // Screen coordinate normalize
                 vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
 
-                // Setup Camera position (observer at distance 4.5)
-                float rCam = 4.5;
-                vec3 ro = vec3(0.0, -rCam * cos(u_pitch), rCam * sin(u_pitch));
-                
-                // Rotated ray direction vector
-                vec3 rd = normalize(vec3(uv.x, 1.0, uv.y));
-                float cp = cos(u_pitch);
-                float sp = sin(u_pitch);
-                rd = vec3(rd.x, rd.y * cp - rd.z * sp, rd.y * sp + rd.z * cp);
+                // 1. Ray setup: Cast ray using virtual camera vectors (perspective projection)
+                // rd = normalize( cam_dir + x * cam_right * fov + y * cam_up * fov )
+                vec3 ro = u_cam_pos;
+                vec3 rd = normalize(u_cam_dir + uv.x * u_cam_right * u_fov_scale + uv.y * u_cam_up * u_fov_scale);
 
-                // Integrator Step setup
-                float dt = 0.04;
+                // Runge-Kutta numerical step integration
+                float dt = 0.035;
                 vec3 ray_pos = ro;
                 vec3 ray_dir = rd;
                 
@@ -188,115 +201,108 @@ class BlackHoleSimulation {
                 float accumulated_disk_alpha = 0.0;
                 
                 bool hit_horizon = false;
-                bool hit_background = true;
 
-                // Raymarching Geodesic Integrator (General Relativity Schwarzschild loop)
-                const int MAX_STEPS = 160;
+                // General Relativity Raymarching Loop (Gargantua space deformation)
+                const int MAX_STEPS = 180;
                 for (int i = 0; i < MAX_STEPS; i++) {
                     float r2 = dot(ray_pos, ray_pos);
                     float r = sqrt(r2);
 
-                    // 1. Schwarzschild Event Horizon boundary check
+                    // A. Schwarzschild horizon collapse boundary check
                     if (r < u_rs) {
                         hit_horizon = true;
-                        hit_background = false;
                         break;
                     }
 
-                    // 2. Escape to Infinity boundary check
-                    if (r > 12.0) {
+                    // B. Boundary escape to background stars
+                    if (r > 15.0) {
                         break;
                     }
 
-                    // 3. Relativistic light deflection step (Einstein Null Geodesics integration)
+                    // C. Light path bending acceleration (Relativity geodesics integration step)
                     if (u_lensing_enabled > 0.5) {
-                        vec3 gravity_dir = -ray_pos / r;
-                        // Light bending acceleration multiplier
+                        // Deflection acceleration force: a = 1.5 * Rs * L^2 / r^5
                         float deflection = (3.0 * u_rs) / (r2 * r);
                         vec3 angular_momentum = cross(ray_pos, ray_dir);
                         ray_dir += cross(angular_momentum, ray_pos) * deflection * dt;
                         ray_dir = normalize(ray_dir);
                     }
 
-                    // 4. Accretion Disk mapping intersection check (Thin equatorial disk)
+                    // D. Accretion Disk plane crossing check (z = 0 equatorial plane)
                     float z_prev = ray_pos.z;
                     ray_pos += ray_dir * dt;
                     float z_curr = ray_pos.z;
 
-                    // Did the ray cross the equatorial plane (z = 0)?
+                    // Did ray cross z=0 equatorial disk plane?
                     if ((z_prev > 0.0 && z_curr < 0.0) || (z_prev < 0.0 && z_curr > 0.0)) {
+                        // Interpolate precise plane cross point
                         float t_plane = -z_prev / (z_curr - z_prev);
                         vec3 hit_pos = ray_pos - ray_dir * (1.0 - t_plane) * dt;
                         float dist = length(hit_pos.xy);
 
-                        // Accretion disk domain: starts at ISCO (3 * Rs) and extends to 8.5 * Rs
+                        // Accretion disk scale bounds: ISCO (3.0 * Rs) to Outer (10.0 * Rs)
                         float r_isco = 3.0 * u_rs;
-                        float r_outer = 9.0 * u_rs;
+                        float r_outer = 9.5 * u_rs;
 
                         if (dist > r_isco && dist < r_outer) {
-                            // Compute localized gas color and noise structure
                             float angle = atan(hit_pos.y, hit_pos.x);
                             
-                            // Gas rotation velocity (Keplerian w = sqrt(G*M/r^3))
-                            float angular_velocity = 2.5 / (dist * sqrt(dist));
-                            float noise_val = noise(vec3(hit_pos.xy * 8.0, u_time * 2.0 - angle * 4.0));
+                            // Keplerian orbital speed (w = sqrt(G*M/r^3))
+                            float w = 2.8 / (dist * sqrt(dist));
+                            float noise_val = noise(vec3(hit_pos.xy * 7.5, u_time * 2.2 - angle * 4.5));
                             
-                            // Thermal glow distribution profile
-                            float density_profile = smoothstep(r_isco, r_isco + 0.15, dist) * (1.0 - smoothstep(r_isco + 0.15, r_outer, dist));
-                            density_profile = pow(density_profile, 1.3);
+                            // Thermal profile curve
+                            float density = smoothstep(r_isco, r_isco + 0.18, dist) * (1.0 - smoothstep(r_isco + 0.18, r_outer, dist));
+                            density = pow(density, 1.2);
 
-                            float brightness = (0.2 + 0.8 * noise_val) * density_profile * u_accretion_rate;
+                            float brightness = (0.22 + 0.78 * noise_val) * density * u_accretion_rate;
                             
-                            // Accretion temperature based color gradient (hot white core, orange middle, red boundaries)
-                            vec3 disk_base_color = vec3(1.0, 0.45, 0.1); // Warm solar orange
-                            if (dist < r_isco * 1.6) {
-                                disk_base_color = mix(vec3(1.0, 0.45, 0.1), vec3(1.0, 0.9, 0.7), (r_isco * 1.6 - dist) / (r_isco * 0.6));
+                            // Color mapping (hottest at innermost orbits)
+                            vec3 disk_base_color = vec3(1.0, 0.48, 0.12); // Hot orange
+                            if (dist < r_isco * 1.5) {
+                                disk_base_color = mix(vec3(1.0, 0.48, 0.12), vec3(1.0, 0.95, 0.8), (r_isco * 1.5 - dist) / (r_isco * 0.5));
                             }
-                            
-                            // Relativistic Doppler Beaming factor calculation
-                            // Disc rotates counter-clockwise. Velocity vector is perpendicular to hit_pos vector.
-                            vec3 disk_velocity = normalize(vec3(-hit_pos.y, hit_pos.x, 0.0)) * 0.48; // speed fraction of c ~ 48%
+
+                            // Relativistic Doppler Beaming
                             float doppler_factor = 1.0;
                             if (u_doppler_enabled > 0.5) {
+                                // Disc orbits counter-clockwise. Velocity vector perpendicular to pos vector
+                                vec3 disk_velocity = normalize(vec3(-hit_pos.y, hit_pos.x, 0.0)) * 0.46; // orbital velocity fraction of c
                                 float cos_theta = dot(disk_velocity, ray_dir);
-                                // Relativistic Doppler equation: D = 1 / ( gamma * (1 - beta*cos) )
                                 float gamma = 1.0 / sqrt(1.0 - dot(disk_velocity, disk_velocity));
                                 doppler_factor = 1.0 / (gamma * (1.0 - cos_theta));
-                                doppler_factor = pow(doppler_factor, 3.0); // intensity boosts by D^3 due to frequency and beaming
+                                doppler_factor = pow(doppler_factor, 3.0); // Boosted by D^3
                             }
 
-                            // Gravitational Redshift factor: z_grav = sqrt(1 - Rs/r)
+                            // Gravitational Redshift: redshift = sqrt(1 - Rs/r)
                             float redshift_factor = 1.0;
                             if (u_redshift_enabled > 0.5) {
                                 redshift_factor = sqrt(1.0 - u_rs / dist);
-                                disk_base_color = mix(vec3(0.5, 0.02, 0.0), disk_base_color, redshift_factor); // redshift shifts hues into dark blood red
+                                disk_base_color = mix(vec3(0.4, 0.01, 0.0), disk_base_color, redshift_factor); // redshift Shifts colors to deep crimson
                             }
 
-                            // Composite pixel contribution
-                            float opacity = brightness * 0.7 * (1.0 - accumulated_disk_alpha);
-                            color += disk_base_color * brightness * doppler_factor * redshift_factor * opacity * 2.2;
+                            // Accumulate volumetric alpha blending
+                            float opacity = brightness * 0.65 * (1.0 - accumulated_disk_alpha);
+                            color += disk_base_color * brightness * doppler_factor * redshift_factor * opacity * 2.5;
                             accumulated_disk_alpha += opacity;
 
                             if (accumulated_disk_alpha >= 0.98) {
-                                hit_background = false;
                                 break;
                             }
                         }
                     }
                 }
 
-                // 5. Draw Background distortion or Event Horizon black shadow
+                // 2. Draw black Schwarzschild shadow or Einstein warped background stars
                 if (hit_horizon) {
                     gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
                 } else {
-                    // Gravitational Lensing coordinates map on sphere texture
+                    // Map background coordinate on starfield texture
                     vec2 star_uv = vec2(
-                        0.5 + atan(ray_dir.z, ray_dir.x) / (2.0 * 3.1415926),
-                        0.5 + asin(ray_dir.y) / 3.1415926
+                        0.5 + atan(ray_dir.z, ray_dir.x) / (2.0 * 3.14159265),
+                        0.5 + asin(ray_dir.y) / 3.14159265
                     );
                     vec3 stars = texture2D(u_bg_texture, star_uv).rgb;
-                    
-                    // Mix distorted background stars with accumulated semi-opaque disk glow
                     vec3 final_color = color + stars * (1.0 - accumulated_disk_alpha);
                     gl_FragColor = vec4(final_color, 1.0);
                 }
@@ -312,7 +318,7 @@ class BlackHoleSimulation {
             depthTest: false
         });
 
-        // 2D orthographic plane covering full screen viewport
+        // 2D full screen orthographic plane to projection space
         const planeGeo = new THREE.PlaneGeometry(2, 2);
         const planeMesh = new THREE.Mesh(planeGeo, this.shaderMat);
         this.scene.add(planeMesh);
@@ -320,7 +326,32 @@ class BlackHoleSimulation {
         window.addEventListener("resize", () => this.resize());
     }
 
-    // Programmatically render a high resolution night sky texture to bypass static file loadings
+    syncVirtualCameraToSliders() {
+        // Position camera spherically based on pitch and distance
+        const r = 4.5;
+        const pitchRad = (this.pitchAngle / 180) * Math.PI;
+        
+        // Position on circle in Y-Z plane
+        this.virtualCamera.position.set(0.0, -r * Math.cos(pitchRad), r * Math.sin(pitchRad));
+        this.virtualCamera.lookAt(0, 0, 0);
+    }
+
+    syncSlidersToVirtualCamera() {
+        // Read camera position and deduce physical pitch angle
+        const pos = this.virtualCamera.position;
+        const r_flat = Math.sqrt(pos.x * pos.x + pos.y * pos.y);
+        
+        // Calculate pitch angle relative to equatorial plane
+        const pitchRad = Math.atan2(pos.z, r_flat);
+        let pitchDeg = (pitchRad * 180) / Math.PI;
+        pitchDeg = Math.max(0, Math.min(pitchDeg, 80)); // boundaries
+        
+        this.pitchAngle = pitchDeg;
+        this.valPitch.textContent = Math.round(this.pitchAngle);
+        this.sliderPitch.value = Math.round(this.pitchAngle);
+    }
+
+    // High resolution stars and nebula dust canvas texture generator
     generateCosmicTexture() {
         const size = 1024;
         const canvas = document.createElement("canvas");
@@ -328,33 +359,33 @@ class BlackHoleSimulation {
         canvas.height = size;
         const ctx = canvas.getContext("2d");
 
-        // Pitch black deep space
-        ctx.fillStyle = "#020206";
+        // Pitch black cosmos background
+        ctx.fillStyle = "#020105";
         ctx.fillRect(0, 0, size, size);
 
-        // Milky Way dust lane background gradient
-        const grad = ctx.createRadialGradient(size/2, size/2, 50, size/2, size/2, size * 0.45);
-        grad.addColorStop(0, "rgba(80, 40, 120, 0.15)");
-        grad.addColorStop(0.3, "rgba(40, 60, 140, 0.08)");
+        // Milky Way dust lanes and celestial gas nebula
+        const grad = ctx.createRadialGradient(size/2, size/2, 20, size/2, size/2, size * 0.48);
+        grad.addColorStop(0, "rgba(95, 45, 140, 0.16)");
+        grad.addColorStop(0.35, "rgba(45, 65, 160, 0.08)");
         grad.addColorStop(1, "rgba(0,0,0,0)");
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, size, size);
 
-        // Add 800 random pinpoint stars
+        // Add 900 pinpoint stars
         ctx.fillStyle = "#ffffff";
-        for (let i = 0; i < 800; i++) {
+        for (let i = 0; i < 900; i++) {
             const x = Math.random() * size;
             const y = Math.random() * size;
             const r = 0.5 + Math.random() * 1.5;
             
-            // Randomly hue-color some stars (hot blue vs cool orange)
-            const hue = Math.random();
-            if (hue < 0.2) {
-                ctx.fillStyle = "rgba(173, 216, 230, " + (0.5 + Math.random() * 0.5) + ")"; // light blue
-            } else if (hue < 0.35) {
-                ctx.fillStyle = "rgba(255, 224, 189, " + (0.5 + Math.random() * 0.5) + ")"; // orange
+            // Warm vs Hot color spectrum distribution
+            const cType = Math.random();
+            if (cType < 0.22) {
+                ctx.fillStyle = "rgba(170, 215, 255, " + (0.55 + Math.random()*0.4) + ")"; // hot blue
+            } else if (cType < 0.38) {
+                ctx.fillStyle = "rgba(255, 220, 180, " + (0.55 + Math.random()*0.4) + ")"; // warm orange
             } else {
-                ctx.fillStyle = "rgba(255, 255, 255, " + (0.6 + Math.random() * 0.4) + ")";
+                ctx.fillStyle = "rgba(255, 255, 255, " + (0.65 + Math.random()*0.35) + ")";
             }
 
             ctx.beginPath();
@@ -373,9 +404,13 @@ class BlackHoleSimulation {
         if (!this.container) return;
         const width = this.container.clientWidth;
         const height = this.container.clientHeight;
+        if (width === 0 || height === 0) return; // Safeguard
         
         this.renderer.setSize(width, height);
         this.uniforms.u_resolution.value.set(width, height);
+        
+        this.virtualCamera.aspect = width / height;
+        this.virtualCamera.updateProjectionMatrix();
     }
 
     pause() {
@@ -384,7 +419,9 @@ class BlackHoleSimulation {
 
     resume() {
         this.isActive = true;
-        this.resize();
+        setTimeout(() => {
+            this.resize();
+        }, 50);
     }
 
     animate() {
@@ -392,24 +429,47 @@ class BlackHoleSimulation {
 
         if (!this.isActive || window.AstrophysicsLab.activeTab !== 'blackhole') return;
 
-        // 1. Smoothly update uniforms based on real calculations and slider configs
+        // 1. Update controls damping and sync camera variables to uniforms
+        this.controls.update();
+
+        // If the user is rotating using OrbitControls, sync the sliders value
+        if (this.controls.state === -1) {
+            // Idle state, synced from controls rotation
+            this.syncSlidersToVirtualCamera();
+        }
+
+        // Compute camera direction, up, and right vectors from matrices for ray projection
+        const camPos = this.virtualCamera.position;
+        
+        const camDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.virtualCamera.quaternion).normalize();
+        const camUp = new THREE.Vector3(0, 1, 0).applyQuaternion(this.virtualCamera.quaternion).normalize();
+        const camRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.virtualCamera.quaternion).normalize();
+
+        // Calculate perspective scale factor based on field of view (FOV) scale
+        // fovScale = tan(fov / 2)
+        const fovScale = Math.tan(THREE.MathUtils.degToRad(this.virtualCamera.fov) / 2.0);
+
+        // 2. Smoothly update uniforms
         this.uniforms.u_time.value += 0.015;
         
-        // Schwarzschild radius mapping: Mass 10 => Rs = 0.18 unit in shader coordinates
+        // Mass 10 solar => Rs ~ 0.18 shader coordinates
         const rsShaderScale = 0.018 * this.mass;
         this.uniforms.u_rs.value = rsShaderScale;
-        
-        // Pitch in radians (0 to 80 degrees -> 0 to 1.4 rad)
-        const pitchRad = (this.pitchAngle / 180) * Math.PI;
-        this.uniforms.u_pitch.value = pitchRad;
 
         this.uniforms.u_accretion_rate.value = this.accretionRate;
         this.uniforms.u_doppler_enabled.value = this.dopplerEffect ? 1.0 : 0.0;
         this.uniforms.u_redshift_enabled.value = this.redshiftEffect ? 1.0 : 0.0;
         this.uniforms.u_lensing_enabled.value = this.gravLensing ? 1.0 : 0.0;
 
-        // Render the GLSL Raymarching shader scene
-        this.renderer.render(this.scene, this.camera);
+        // Projection vectors passed to GPU
+        this.uniforms.u_cam_pos.value.copy(camPos);
+        this.uniforms.u_cam_dir.value.copy(camDir);
+        this.uniforms.u_cam_up.value.copy(camUp);
+        this.uniforms.u_cam_right.value.copy(camRight);
+        this.uniforms.u_fov_scale.value = fovScale;
+
+        // Render orthographic shader projection
+        this.renderer.render(this.scene, this.renderCamera);
     }
 }
 
