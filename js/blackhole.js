@@ -54,8 +54,13 @@ class BlackHoleSimulation {
 
         // Event Listeners
         this.sliderMass.addEventListener("input", (e) => {
-            this.mass = parseFloat(e.target.value);
-            this.valMass.textContent = this.mass.toFixed(1);
+            this.mass = Math.pow(10, parseFloat(e.target.value));
+            
+            let formattedMass = this.mass >= 1e9 ? (this.mass / 1e9).toFixed(2) + " Bilhões " : 
+                                this.mass >= 1e6 ? (this.mass / 1e6).toFixed(2) + " Milhões " : 
+                                this.mass >= 1e3 ? (this.mass / 1e3).toFixed(1) + " Mil " : 
+                                this.mass.toFixed(1) + " ";
+            this.valMass.textContent = formattedMass;
             this.updateHUD();
         });
 
@@ -123,9 +128,16 @@ class BlackHoleSimulation {
         const rph_km = rg_km * (this.spin > 0 ? 2.0 : 3.0); // photon sphere approx
         const isco_km = rg_km * (this.spin > 0 ? 3.0 : 6.0); // stable orbit approx
 
-        this.metricRs.textContent = rh_km.toFixed(1) + " km";
-        this.metricRph.textContent = rph_km.toFixed(1) + " km";
-        this.metricIsco.textContent = isco_km.toFixed(1) + " km";
+        const formatDistance = (km) => {
+            if (km > 1.496e8) return (km / 1.496e8).toFixed(4) + " UA";
+            if (km > 1e9) return (km / 1e9).toFixed(2) + " Bilhões km";
+            if (km > 1e6) return (km / 1e6).toFixed(2) + " Milhões km";
+            return km.toFixed(1) + " km";
+        };
+
+        this.metricRs.textContent = formatDistance(rh_km);
+        this.metricRph.textContent = formatDistance(rph_km);
+        this.metricIsco.textContent = formatDistance(isco_km);
 
         // Update overlay title
         const overlayTitle = document.querySelector("#tab-blackhole .overlay-info h3");
@@ -628,8 +640,10 @@ class BlackHoleSimulation {
         // 2. Smoothly update uniforms
         this.uniforms.u_time.value += 0.015;
         
-        // Mass 10 solar => Rs ~ 0.18 shader coordinates
-        const rsShaderScale = 0.018 * this.mass;
+        // Scale-invariant shader size to prevent clipping for huge masses (TON 618)
+        // A slight logarithmic scale makes the user feel the size increase visually without breaking bounds
+        const scaleFactor = 1.0 + Math.log10(Math.max(1, this.mass)) * 0.025;
+        const rsShaderScale = 0.18 * scaleFactor;
         this.uniforms.u_rs.value = rsShaderScale;
 
         this.uniforms.u_accretion_rate.value = this.accretionRate;

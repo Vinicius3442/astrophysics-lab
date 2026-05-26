@@ -862,6 +862,15 @@ class StellarSimulation {
     updateExoticVisuals(val) {
         if (!this.exoticEffectsGroup) return;
         
+        // Restore defaults
+        if (this.starMat) {
+            this.starMat.transparent = false;
+            this.starMat.opacity = 1.0;
+        }
+        if (this.coronaMesh) {
+            this.coronaMesh.visible = true;
+        }
+        
         // Clear old ones
         while (this.exoticEffectsGroup.children.length > 0) {
             this.exoticEffectsGroup.remove(this.exoticEffectsGroup.children[0]);
@@ -894,12 +903,18 @@ class StellarSimulation {
 
             // Outward wind particles - Powered by Castor, Abbott & Klein (CAK) Line-Driven Wind Theory
             // v(r) = v_inf * (1.0 - R_star / r)^beta
-            this.windCount = 350;
+            this.windCount = 4500;
             this.windGeo = new THREE.BufferGeometry();
             this.windPositions = new Float32Array(this.windCount * 3);
             this.windSpeeds = new Float32Array(this.windCount);
             this.windDirections = new Float32Array(this.windCount * 3);
             this.windRadii = new Float32Array(this.windCount); // track current distance from star center
+            
+            // Make core violently exposed
+            this.starMat.transparent = true;
+            this.starMat.opacity = 0.95;
+            this.starMat.color.setHex(0x1a00ff); // intense violet-blue core
+            this.coronaMesh.visible = false; // Hide fluffy outer corona
             
             for (let i = 0; i < this.windCount; i++) {
                 const theta = Math.random() * Math.PI * 2;
@@ -924,8 +939,8 @@ class StellarSimulation {
                 this.windPositions[i*3+1] = dir.y * r;
                 this.windPositions[i*3+2] = dir.z * r;
                 
-                // Initial wind speed
-                this.windSpeeds[i] = 0.015;
+                // Initial wind speed (hyper fast for exposed core)
+                this.windSpeeds[i] = 0.045 + Math.random() * 0.04;
             }
             
             this.windGeo.setAttribute('position', new THREE.BufferAttribute(this.windPositions, 3));
@@ -1270,13 +1285,20 @@ class StellarSimulation {
 
         // Pulsate the core sphere for realism (neutron core override for TZO)
         if (this.selectedExotic === 'tzo') {
-            this.coreMesh.material.color.setHex(0x00f5d4);
+            this.coreMesh.material.color.setHex(0x00ffff);
+            if (this.coreMesh.material.emissive !== undefined) {
+                this.coreMesh.material.emissive.setHex(0x00ffff);
+                this.coreMesh.material.emissiveIntensity = 2.5;
+            }
             // Pulsate extremely fast to represent a high-rotation degenerate neutron core
-            const tzoScale = scaleFactor * 0.35 * (1.0 + Math.sin(performance.now() * 0.08) * 0.22);
+            const tzoScale = scaleFactor * 0.12 * (1.0 + Math.sin(performance.now() * 0.12) * 0.15);
             this.coreMesh.scale.setScalar(tzoScale);
         } else {
             if (this.coreMesh.material.color) {
                 this.coreMesh.material.color.setHex(0xffffff);
+            }
+            if (this.coreMesh.material.emissive !== undefined) {
+                this.coreMesh.material.emissive.setHex(0x000000);
             }
             const coreScale = scaleFactor * (1.0 + Math.sin(performance.now() * 0.015) * 0.04);
             this.coreMesh.scale.setScalar(coreScale);
