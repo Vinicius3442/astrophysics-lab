@@ -184,12 +184,24 @@ class BlackHoleSimulation {
                 );
             }
 
+            // Fractal Brownian Motion (FBM) with 4 octaves for fine organic dust lanes
+            float fbm(vec3 p) {
+                float v = 0.0;
+                float a = 0.5;
+                vec3 shift = vec3(100.0);
+                for (int i = 0; i < 4; ++i) {
+                    v += a * noise(p);
+                    p = p * 2.2 + shift;
+                    a *= 0.5;
+                }
+                return v;
+            }
+
             void main() {
                 // Screen coordinate normalize
                 vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
 
                 // 1. Ray setup: Cast ray using virtual camera vectors (perspective projection)
-                // rd = normalize( cam_dir + x * cam_right * fov + y * cam_up * fov )
                 vec3 ro = u_cam_pos;
                 vec3 rd = normalize(u_cam_dir + uv.x * u_cam_right * u_fov_scale + uv.y * u_cam_up * u_fov_scale);
 
@@ -250,36 +262,50 @@ class BlackHoleSimulation {
                             
                             // Keplerian orbital speed (w = sqrt(G*M/r^3))
                             float w = 2.8 / (dist * sqrt(dist));
-                            float noise_val = noise(vec3(hit_pos.xy * 7.5, u_time * 2.2 - angle * 4.5));
                             
-                            // Thermal profile curve
+                            // Keplerian differential shear: inner orbits rotate faster
+                            // w_shear decays as dist^-1.5
+                            float angle_sheared = angle - u_time * (1.6 / pow(dist, 1.5));
+                            
+                            // Evaluate FBM noise in shearing coordinates for beautiful spiraling dust filaments
+                            float noise_val = fbm(vec3(hit_pos.xy * 6.5, angle_sheared * 4.8));
+                            
+                            // Thermal profile density curve (sharp inner cut at ISCO, smooth outer decay)
                             float density = smoothstep(r_isco, r_isco + 0.18, dist) * (1.0 - smoothstep(r_isco + 0.18, r_outer, dist));
-                            density = pow(density, 1.2);
+                            density = pow(density, 1.25);
 
-                            float brightness = (0.22 + 0.78 * noise_val) * density * u_accretion_rate;
+                            // Fade brightness near horizon boundary to show Schwarzschild silhouette clearly
+                            density *= smoothstep(r_isco * 0.95, r_isco * 1.05, dist);
+
+                            float brightness = (0.2 + 0.8 * noise_val) * density * u_accretion_rate;
                             
-                            // Color mapping (hottest at innermost orbits)
-                            vec3 disk_base_color = vec3(1.0, 0.48, 0.12); // Hot orange
-                            if (dist < r_isco * 1.5) {
-                                disk_base_color = mix(vec3(1.0, 0.48, 0.12), vec3(1.0, 0.95, 0.8), (r_isco * 1.5 - dist) / (r_isco * 0.5));
+                            // Base color mapping (extremely hot near inner edge)
+                            vec3 disk_base_color = vec3(1.0, 0.45, 0.08); // Deep hot orange
+                            if (dist < r_isco * 1.6) {
+                                disk_base_color = mix(vec3(1.0, 0.45, 0.08), vec3(1.0, 0.94, 0.82), (r_isco * 1.6 - dist) / (r_isco * 0.6));
                             }
 
                             // Relativistic Doppler Beaming
                             float doppler_factor = 1.0;
                             if (u_doppler_enabled > 0.5) {
-                                // Disc orbits counter-clockwise. Velocity vector perpendicular to pos vector
-                                vec3 disk_velocity = normalize(vec3(-hit_pos.y, hit_pos.x, 0.0)) * 0.46; // orbital velocity fraction of c
+                                // Relativistic velocity increases near the event horizon v = sqrt(GM/r)
+                                float v_orb = 0.58 * sqrt(u_rs / dist);
+                                vec3 disk_velocity = normalize(vec3(-hit_pos.y, hit_pos.x, 0.0)) * v_orb;
                                 float cos_theta = dot(disk_velocity, ray_dir);
                                 float gamma = 1.0 / sqrt(1.0 - dot(disk_velocity, disk_velocity));
                                 doppler_factor = 1.0 / (gamma * (1.0 - cos_theta));
-                                doppler_factor = pow(doppler_factor, 3.0); // Boosted by D^3
+                                doppler_factor = pow(doppler_factor, 3.0); // D^3 intensity boost
+                                
+                                // Relativistic color shifting (blue-shift left, red-shift right)
+                                disk_base_color = mix(vec3(0.35, 0.01, 0.0), disk_base_color, smoothstep(0.4, 0.9, doppler_factor));
+                                disk_base_color = mix(disk_base_color, vec3(0.7, 0.92, 1.0), smoothstep(1.0, 2.3, doppler_factor));
                             }
 
                             // Gravitational Redshift: redshift = sqrt(1 - Rs/r)
                             float redshift_factor = 1.0;
                             if (u_redshift_enabled > 0.5) {
                                 redshift_factor = sqrt(1.0 - u_rs / dist);
-                                disk_base_color = mix(vec3(0.4, 0.01, 0.0), disk_base_color, redshift_factor); // redshift Shifts colors to deep crimson
+                                disk_base_color = mix(vec3(0.35, 0.005, 0.0), disk_base_color, redshift_factor); // deep gravitational redshift
                             }
 
                             // Accumulate volumetric alpha blending
