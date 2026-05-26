@@ -1,4 +1,5 @@
 // ASTROPHYSICS LAB - KEPLER'S LAWS SIMULATION (js/kepler.js)
+// Física Aplicada: Primeira Lei (Elipses), Segunda Lei (Áreas em tempos iguais) e Terceira Lei (Períodos T² = a³)
 
 class KeplerSimulation {
     constructor() {
