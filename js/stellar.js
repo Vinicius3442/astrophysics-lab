@@ -40,8 +40,8 @@ class StellarSimulation {
     initUI() {
         this.sliderMass = document.getElementById("slider-s-mass");
         this.sliderTemp = document.getElementById("slider-s-temp");
-        this.valMass = document.getElementById("val-s-mass");
-        this.valTemp = document.getElementById("val-s-temp");
+        this.numMass = document.getElementById("num-s-mass");
+        this.numTemp = document.getElementById("num-s-temp");
         this.valLum = document.getElementById("val-s-lum");
         
         this.valPP = document.getElementById("val-s-pp");
@@ -55,6 +55,8 @@ class StellarSimulation {
         this.metricTime = document.getElementById("metric-s-time");
         
         this.btnEvolve = document.getElementById("btn-s-evolve");
+        this.btnReset = document.getElementById("btn-s-reset");
+        this.toggleInternal = document.getElementById("toggle-s-internal");
         
         // Alert Modal Elements
         this.alertModal = document.getElementById("stellar-alert");
@@ -62,52 +64,108 @@ class StellarSimulation {
         this.alertDesc = document.getElementById("alert-desc");
         this.btnAlertClose = document.getElementById("btn-alert-close");
 
-        // Input Handlers
+        // Sync helper to update physical model properties
+        const updateModelFromInputs = () => {
+            this.lum = Math.pow(this.mass, 3.5);
+            this.valLum.textContent = window.formatScientific(this.lum);
+            this.updateStellarPhysics();
+        };
+
+        // Bidirectional Mass Input Listeners
         this.sliderMass.addEventListener("input", (e) => {
             if (this.deathSequenceActive) return;
             this.mass = parseFloat(e.target.value);
-            this.valMass.textContent = this.mass.toFixed(1);
+            this.numMass.value = this.mass.toFixed(1);
             
-            // On the Main Sequence, Luminosity and Temp are bound to Mass:
-            // L ~ M^3.5 for solar-like stars
-            this.lum = Math.pow(this.mass, 3.5);
-            // Temp T ~ M^0.5
+            // Adjust Temperature along the main sequence correlation
             this.temp = Math.round(5778 * Math.pow(this.mass, 0.50));
             this.temp = Math.max(2000, Math.min(this.temp, 40000));
-            
-            // Sync sliders
             this.sliderTemp.value = this.temp;
-            this.valTemp.textContent = this.temp;
+            this.numTemp.value = this.temp;
             
-            this.updateStellarPhysics();
+            updateModelFromInputs();
         });
 
+        this.numMass.addEventListener("change", (e) => {
+            if (this.deathSequenceActive) return;
+            let val = parseFloat(e.target.value);
+            if (isNaN(val)) val = 1.0;
+            this.mass = Math.max(0.1, Math.min(val, 25.0));
+            this.numMass.value = this.mass.toFixed(1);
+            this.sliderMass.value = this.mass;
+
+            this.temp = Math.round(5778 * Math.pow(this.mass, 0.50));
+            this.temp = Math.max(2000, Math.min(this.temp, 40000));
+            this.sliderTemp.value = this.temp;
+            this.numTemp.value = this.temp;
+
+            updateModelFromInputs();
+        });
+
+        // Bidirectional Temp Input Listeners
         this.sliderTemp.addEventListener("input", (e) => {
             if (this.deathSequenceActive) return;
             this.temp = parseInt(e.target.value);
-            this.valTemp.textContent = this.temp;
+            this.numTemp.value = this.temp;
             
-            // Adjust Mass and Luminosity along the Main Sequence corridor
-            // M ~ (T/5778)^2 approximately
+            // Adjust Mass along Main Sequence correlation (approx logarithmic shift)
             const tRatio = this.temp / 5778;
             this.mass = Math.pow(tRatio, 1.8);
-            this.mass = Math.max(0.1, Math.min(this.mass, 25));
-            this.lum = Math.pow(this.mass, 3.5);
-            
-            // Sync sliders
+            this.mass = Math.max(0.1, Math.min(this.mass, 25.0));
             this.sliderMass.value = this.mass.toFixed(1);
-            this.valMass.textContent = this.mass.toFixed(1);
+            this.numMass.value = this.mass.toFixed(1);
             
-            this.updateStellarPhysics();
+            updateModelFromInputs();
+        });
+
+        this.numTemp.addEventListener("change", (e) => {
+            if (this.deathSequenceActive) return;
+            let val = parseInt(e.target.value);
+            if (isNaN(val)) val = 5778;
+            this.temp = Math.max(2000, Math.min(val, 40000));
+            this.numTemp.value = this.temp;
+            this.sliderTemp.value = this.temp;
+
+            const tRatio = this.temp / 5778;
+            this.mass = Math.pow(tRatio, 1.8);
+            this.mass = Math.max(0.1, Math.min(this.mass, 25.0));
+            this.sliderMass.value = this.mass.toFixed(1);
+            this.numMass.value = this.mass.toFixed(1);
+
+            updateModelFromInputs();
+        });
+
+        // Core visual toggler
+        this.toggleInternal.addEventListener("change", (e) => {
+            this.showInternal = e.target.checked;
+            this.internalLayersGroup.visible = this.showInternal;
+            if (this.showInternal) {
+                // Shell becomes transparent ghost shell
+                this.starMat.transparent = true;
+                this.starMat.opacity = 0.18;
+                this.coronaMat.transparent = true;
+                this.coronaMat.opacity = 0.15;
+            } else {
+                this.starMat.transparent = false;
+                this.starMat.opacity = 1.0;
+                this.coronaMat.transparent = true;
+                this.coronaMat.opacity = 0.35;
+            }
         });
 
         this.btnEvolve.addEventListener("click", () => {
             this.triggerDeathSequence();
         });
 
+        this.btnReset.addEventListener("click", () => {
+            this.resetSimulation();
+        });
+
+        // Close the notification overlay without resetting automatically
         this.btnAlertClose.addEventListener("click", () => {
             this.alertModal.classList.remove("active");
-            this.resetSimulation();
+            // The simulation remains showing the remanent in 3D!
+            // The user can rotate/zoom and clicks the Reset button manually to restart
         });
     }
 
@@ -128,24 +186,31 @@ class StellarSimulation {
         this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.05;
-        this.controls.minDistance = 1.5;
+        this.controls.minDistance = 1.0;
         this.controls.maxDistance = 12;
 
         // Space Dust Background
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.05);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.08);
         this.scene.add(ambientLight);
 
         // Core star point light
         this.starLight = new THREE.PointLight(0xffffff, 2.0, 50);
         this.scene.add(this.starLight);
 
+        // ==========================================
+        // EXTERIOR SHELL & CORONA
+        // ==========================================
+        
         // Star 3D Geometry (highly detailed)
         this.starGeo = new THREE.SphereGeometry(1.0, 64, 64);
         
         // Star Material - Custom Fresnel/Plasma Glow Effect simulation
-        this.starMat = new THREE.MeshBasicMaterial({
+        this.starMat = new THREE.MeshPhongMaterial({
             color: 0xffd700,
-            wireframe: false
+            emissive: 0x221100,
+            shininess: 90,
+            transparent: false,
+            opacity: 1.0
         });
         
         this.starMesh = new THREE.Mesh(this.starGeo, this.starMat);
@@ -163,7 +228,128 @@ class StellarSimulation {
         this.coronaMesh = new THREE.Mesh(this.coronaGeo, this.coronaMat);
         this.scene.add(this.coronaMesh);
 
-        // Ejected Envelope Particles (for Supernova / Nebula)
+        // ==========================================
+        // INTERNAL LAYERS & PARTICLES (CROSS SECTION)
+        // ==========================================
+        this.internalLayersGroup = new THREE.Group();
+        this.internalLayersGroup.visible = false; // Hidden by default
+        this.scene.add(this.internalLayersGroup);
+
+        // 1. Core Sphere (Nuclear Center)
+        const coreGeo = new THREE.SphereGeometry(0.24, 32, 32);
+        const coreMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.85,
+            blending: THREE.AdditiveBlending
+        });
+        this.coreMesh = new THREE.Mesh(coreGeo, coreMat);
+        this.internalLayersGroup.add(this.coreMesh);
+
+        // 2. Radiative Zone Shell
+        const radGeo = new THREE.SphereGeometry(0.65, 32, 32);
+        const radMat = new THREE.MeshBasicMaterial({
+            color: 0xff5500,
+            transparent: true,
+            opacity: 0.18,
+            wireframe: true
+        });
+        this.radiativeMesh = new THREE.Mesh(radGeo, radMat);
+        this.internalLayersGroup.add(this.radiativeMesh);
+
+        // 3. Fusion Collision Particles (in Core)
+        this.fusionCount = 150;
+        this.fusionGeo = new THREE.BufferGeometry();
+        this.fusionPositions = new Float32Array(this.fusionCount * 3);
+        this.fusionColors = new Float32Array(this.fusionCount * 3);
+        this.fusionVelocities = [];
+
+        for (let i = 0; i < this.fusionCount; i++) {
+            // Distribute randomly inside a sphere of radius 0.22
+            const r = Math.random() * 0.22;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos((Math.random() * 2) - 1);
+            
+            const x = Math.sin(phi) * Math.cos(theta) * r;
+            const y = Math.sin(phi) * Math.sin(theta) * r;
+            const z = Math.cos(phi) * r;
+            
+            this.fusionPositions[i*3] = x;
+            this.fusionPositions[i*3+1] = y;
+            this.fusionPositions[i*3+2] = z;
+
+            // Direct speeds towards the center for collision animation
+            const speed = 0.002 + Math.random() * 0.003;
+            this.fusionVelocities.push(new THREE.Vector3(-x, -y, -z).normalize().multiplyScalar(speed));
+            
+            // Set initial colors: half red, half yellow
+            if (i % 2 === 0) {
+                this.fusionColors[i*3] = 1.0;   // R
+                this.fusionColors[i*3+1] = 0.1; // G
+                this.fusionColors[i*3+2] = 0.1; // B
+            } else {
+                this.fusionColors[i*3] = 1.0;   // R
+                this.fusionColors[i*3+1] = 0.9; // G
+                this.fusionColors[i*3+2] = 0.0; // B
+            }
+        }
+
+        this.fusionGeo.setAttribute('position', new THREE.BufferAttribute(this.fusionPositions, 3));
+        this.fusionGeo.setAttribute('color', new THREE.BufferAttribute(this.fusionColors, 3));
+        this.fusionMat = new THREE.PointsMaterial({
+            size: 0.04,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending
+        });
+        this.fusionParticles = new THREE.Points(this.fusionGeo, this.fusionMat);
+        this.internalLayersGroup.add(this.fusionParticles);
+
+        // 4. Convective Cells Currents Particles
+        this.convectionCount = 300;
+        this.convectionGeo = new THREE.BufferGeometry();
+        this.convectionPositions = new Float32Array(this.convectionCount * 3);
+        this.convectionStates = []; // Track position, theta angle, and toroidal phase
+
+        for (let i = 0; i < this.convectionCount; i++) {
+            // Distribute in a thick shell between 0.65 (radiative) and 1.0 (surface)
+            const theta = Math.random() * Math.PI * 2;
+            const yAngle = (Math.random() - 0.5) * Math.PI; // latitude
+            const phase = Math.random() * Math.PI * 2; // convection cycle phase
+            
+            // toroidal scale radius
+            const r = 0.65 + (0.35 * (Math.sin(phase) + 1.0) / 2.0);
+            const x = Math.cos(yAngle) * Math.cos(theta) * r;
+            const y = Math.sin(yAngle) * r;
+            const z = Math.cos(yAngle) * Math.sin(theta) * r;
+
+            this.convectionPositions[i*3] = x;
+            this.convectionPositions[i*3+1] = y;
+            this.convectionPositions[i*3+2] = z;
+
+            this.convectionStates.push({
+                theta: theta,
+                yAngle: yAngle,
+                phase: phase,
+                speed: 0.02 + Math.random() * 0.03
+            });
+        }
+
+        this.convectionGeo.setAttribute('position', new THREE.BufferAttribute(this.convectionPositions, 3));
+        this.convectionMat = new THREE.PointsMaterial({
+            color: 0xffd700,
+            size: 0.03,
+            transparent: true,
+            opacity: 0.6,
+            blending: THREE.AdditiveBlending
+        });
+        this.convectionParticles = new THREE.Points(this.convectionGeo, this.convectionMat);
+        this.internalLayersGroup.add(this.convectionParticles);
+
+        // ==========================================
+        // EJECTED PARTICLES (SUPERNOVA)
+        // ==========================================
         this.particleCount = 2000;
         this.particleGeo = new THREE.BufferGeometry();
         this.particlePositions = new Float32Array(this.particleCount * 3);
@@ -179,7 +365,7 @@ class StellarSimulation {
             // Random expanding velocities
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.acos((Math.random() * 2) - 1);
-            const speed = 0.2 + Math.random() * 2.5; // velocity magnitude
+            const speed = 0.2 + Math.random() * 2.8; // higher velocity bounds
             
             this.particleVelocities.push(new THREE.Vector3(
                 Math.sin(phi) * Math.cos(theta) * speed,
@@ -424,15 +610,20 @@ class StellarSimulation {
         this.state = 'evolving';
         this.deathTimer = 0;
 
-        // Block UI sliders
+        // Block UI sliders and numeric inputs
         this.sliderMass.disabled = true;
         this.sliderTemp.disabled = true;
+        this.numMass.disabled = true;
+        this.numTemp.disabled = true;
 
+        // Toggle buttons visibility
+        this.btnEvolve.style.display = 'none';
+        this.btnReset.style.display = 'none';
+
+        // Select proper physical route based on core mass threshold
         if (this.mass < 8.0) {
-            // Low mass death: Red Giant Expansion -> Planetary Nebula -> White Dwarf contraction
             this.deathType = 'white_dwarf';
         } else {
-            // High mass death: Supernova collapse -> Explosion -> Remanent Black Hole/Neutron star
             this.deathType = 'supernova';
         }
     }
@@ -446,11 +637,31 @@ class StellarSimulation {
         this.coronaMesh.visible = true;
         this.particles.material.opacity = 0;
         
-        // Restore sliders
+        // Restore controls visibility and state
         this.sliderMass.disabled = false;
         this.sliderTemp.disabled = false;
+        this.numMass.disabled = false;
+        this.numTemp.disabled = false;
         
-        // Recompute
+        this.btnEvolve.style.display = 'block';
+        this.btnReset.style.display = 'none';
+
+        // Reapply internal transparency toggling state
+        if (this.showInternal) {
+            this.starMat.transparent = true;
+            this.starMat.opacity = 0.18;
+            this.coronaMat.transparent = true;
+            this.coronaMat.opacity = 0.15;
+            this.internalLayersGroup.visible = true;
+        } else {
+            this.starMat.transparent = false;
+            this.starMat.opacity = 1.0;
+            this.coronaMat.transparent = true;
+            this.coronaMat.opacity = 0.35;
+            this.internalLayersGroup.visible = false;
+        }
+        
+        // Recompute physics
         this.updateStellarPhysics();
     }
 
@@ -458,6 +669,7 @@ class StellarSimulation {
         if (!this.container) return;
         const width = this.container.clientWidth;
         const height = this.container.clientHeight;
+        if (width === 0 || height === 0) return; // Safeguard
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(width, height);
@@ -469,7 +681,9 @@ class StellarSimulation {
 
     resume() {
         this.isActive = true;
-        this.resize();
+        setTimeout(() => {
+            this.resize();
+        }, 50);
     }
 
     animate() {
@@ -483,6 +697,11 @@ class StellarSimulation {
         if (this.state !== 'nebula' && this.state !== 'remanent') {
             this.starMesh.rotation.y += 0.006;
             this.starMesh.rotation.x += 0.002;
+        }
+
+        // 0. ANIMATE CORE FUSION AND CONVECTION PARTICLES
+        if (this.showInternal && this.state === 'main_sequence') {
+            this.animateInternalLayers();
         }
 
         // Draw the HR Diagram at 30 FPS or when active
@@ -499,11 +718,108 @@ class StellarSimulation {
             }
         } else {
             // Gentle pulse on main sequence
-            const scalePulse = 1.0 + Math.sin(performance.now() * 0.002) * 0.015;
-            this.coronaMesh.scale.copy(this.starMesh.scale).multiplyScalar(1.05 * scalePulse);
+            if (this.state === 'main_sequence') {
+                const scalePulse = 1.0 + Math.sin(performance.now() * 0.002) * 0.015;
+                this.coronaMesh.scale.copy(this.starMesh.scale).multiplyScalar(1.05 * scalePulse);
+            }
         }
 
         this.renderer.render(this.scene, this.camera);
+    }
+
+    animateInternalLayers() {
+        // 1. Fusion Particles inside Core
+        const fusionPos = this.fusionParticles.geometry.attributes.position.array;
+        const fusionColors = this.fusionParticles.geometry.attributes.color.array;
+        const scaleFactor = Math.max(0.2, Math.min(this.radius * 0.7, 2.0));
+
+        for (let i = 0; i < this.fusionCount; i++) {
+            const vel = this.fusionVelocities[i];
+            
+            // Move particles in local coordinates
+            fusionPos[i*3] += vel.x * (this.cnoFraction > 0.5 ? 2.2 : 1.0);
+            fusionPos[i*3+1] += vel.y * (this.cnoFraction > 0.5 ? 2.2 : 1.0);
+            fusionPos[i*3+2] += vel.z * (this.cnoFraction > 0.5 ? 2.2 : 1.0);
+
+            const dx = fusionPos[i*3];
+            const dy = fusionPos[i*3+1];
+            const dz = fusionPos[i*3+2];
+            const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
+            // Reached core center, trigger fusion!
+            if (dist < 0.02 * scaleFactor) {
+                // Reset to core border (r = 0.24 * scaleFactor)
+                const r = 0.24 * scaleFactor;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos((Math.random() * 2) - 1);
+                
+                fusionPos[i*3] = Math.sin(phi) * Math.cos(theta) * r;
+                fusionPos[i*3+1] = Math.sin(phi) * Math.sin(theta) * r;
+                fusionPos[i*3+2] = Math.cos(phi) * r;
+
+                this.fusionVelocities[i].set(
+                    -fusionPos[i*3],
+                    -fusionPos[i*3+1],
+                    -fusionPos[i*3+2]
+                ).normalize().multiplyScalar(0.002 + Math.random() * 0.003);
+
+                // Dynamically update colors based on p-p vs CNO Cycle
+                if (this.cnoFraction > 0.5) {
+                    // CNO Cycle: Carbon, Nitrogen, Oxygen and Hydrogen in flashy neon blues/purples
+                    const cnoPalette = [
+                        [0.0, 0.95, 1.0], // Blue-Cyan (Hydrogen)
+                        [0.6, 0.1, 1.0], // Neon Purple (Carbon)
+                        [1.0, 0.0, 0.8], // Magenta (Nitrogen)
+                        [0.0, 1.0, 0.5]  // Emerald (Oxygen)
+                    ];
+                    const selectedColor = cnoPalette[Math.floor(Math.random() * cnoPalette.length)];
+                    fusionColors[i*3] = selectedColor[0];
+                    fusionColors[i*3+1] = selectedColor[1];
+                    fusionColors[i*3+2] = selectedColor[2];
+                } else {
+                    // p-p Chain: Proton collisions (Red to Solar Yellow)
+                    fusionColors[i*3] = 1.0;
+                    fusionColors[i*3+1] = 0.4 + Math.random() * 0.5;
+                    fusionColors[i*3+2] = 0.0;
+                }
+            }
+        }
+        this.fusionParticles.geometry.attributes.position.needsUpdate = true;
+        this.fusionParticles.geometry.attributes.color.needsUpdate = true;
+
+        // 2. Convection Toroidal Cells Currents
+        const convPos = this.convectionParticles.geometry.attributes.position.array;
+        for (let i = 0; i < this.convectionCount; i++) {
+            const state = this.convectionStates[i];
+            
+            // toroidal rotation convection phase
+            state.phase += state.speed;
+            state.theta += 0.003; // rotate around polar axis
+
+            // Bénard Convective Toroidal scaling cell math
+            const r_inner = 0.65 * scaleFactor;
+            const r_outer = 1.0 * scaleFactor;
+            const radialSpan = r_outer - r_inner;
+            
+            // Radius goes in loop from inner to outer boundary
+            const r = r_inner + (radialSpan * (Math.sin(state.phase) + 1.0) / 2.0);
+            
+            const x = Math.cos(state.yAngle) * Math.cos(state.theta) * r;
+            const y = Math.sin(state.yAngle) * r;
+            const z = Math.cos(state.yAngle) * Math.sin(state.theta) * r;
+
+            convPos[i*3] = x;
+            convPos[i*3+1] = y;
+            convPos[i*3+2] = z;
+        }
+        this.convectionParticles.geometry.attributes.position.needsUpdate = true;
+
+        // Pulsate the core sphere for realism
+        const coreScale = scaleFactor * (1.0 + Math.sin(performance.now() * 0.015) * 0.04);
+        this.coreMesh.scale.setScalar(coreScale);
+        
+        const radScale = scaleFactor;
+        this.radiativeMesh.scale.setScalar(radScale);
     }
 
     // A: Low-mass evolutionary animation sequence
@@ -574,9 +890,12 @@ class StellarSimulation {
             if (this.deathTimer > 7.5) {
                 this.alertTitle.textContent = "ANÃ BRANCA CRIADA!";
                 this.alertTitle.className = "alert-title collapse";
-                this.alertDesc.textContent = `A estrela de baixa massa (${this.mass.toFixed(1)} M⊙) concluiu a queima do hélio. Suas camadas externas foram dispersas como uma bela Nebulosa Planetária. O núcleo contraiu-se para uma Anã Branca sustentada pela Pressão de Degenerescência Eletrônica, resfriando-se lentamente pela eternidade.`;
+                this.alertDesc.textContent = `A estrela de baixa massa (${this.mass.toFixed(1)} M⊙) concluiu a queima do hélio. Suas camadas externas foram dispersas como uma bela Nebula Planetária. O núcleo contraiu-se para uma Anã Branca sustentada pela Pressão de Degenerescência Eletrônica, resfriando-se lentamente pela eternidade.`;
                 this.alertModal.classList.add("active");
                 this.deathSequenceActive = false;
+
+                // Habilita o botão manual para reiniciar o ciclo
+                this.btnReset.style.display = 'block';
             }
         }
     }
@@ -659,11 +978,14 @@ class StellarSimulation {
 
             if (this.deathTimer > 5.0) {
                 const isBH = this.mass >= 15.0;
-                this.alertTitle.textContent = "SUPERNOVA DE CATÁSTROFE!";
-                this.alertTitle.className = "alert-title supernova";
+                this.alertTitle.textContent = isBH ? "BURACO NEGRO DE SINGULARIDADE!" : "ESTRELA DE NÊUTRONS CRIADA!";
+                this.alertTitle.className = isBH ? "alert-title collapse" : "alert-title supernova";
                 this.alertDesc.textContent = `A estrela massiva (${this.mass.toFixed(1)} M⊙) exauriu sua queima. O colapso gravitacional implodiu o núcleo instantaneamente, liberando uma energia equivalente a ${isBH ? "um buraco negro estelar" : "uma estrela de nêutrons"} como remanescente denso no centro da nebulosa expansiva.`;
                 this.alertModal.classList.add("active");
                 this.deathSequenceActive = false;
+
+                // Habilita o botão manual para reiniciar o ciclo
+                this.btnReset.style.display = 'block';
                 
                 // Reset positions for particles for future run
                 const positions = this.particles.geometry.attributes.position.array;
