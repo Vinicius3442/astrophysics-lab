@@ -314,13 +314,13 @@ class KeplerSimulation {
         this.focusRing.rotation.x = Math.PI / 2;
         this.scene.add(this.focusRing);
 
-        // Initial setup
-        this.updateOrbitGeometry();
-        this.updateThirdLawHUD();
-        
         // Wedge tracker for the Second Law
         this.areaWedges = [];
         this.lastWedgeTime = 0;
+
+        // Initial setup
+        this.updateOrbitGeometry();
+        this.updateThirdLawHUD();
     }
 
     // Solves Kepler's Equation M = E - e*sin(E) using Newton-Raphson
