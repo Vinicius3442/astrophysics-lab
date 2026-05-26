@@ -1,4 +1,5 @@
 // ASTROPHYSICS LAB - STELLAR SIMULATION (js/stellar.js)
+// Física Estelar Avançada: Estrutura Interna 3D (Corte Transversal), Fusão de Prótons (p-p) e Elementos (CNO) no Núcleo e Correntes Convectivas Toroidais.
 // Física Estelar Avançada: Fusão Termonuclear p-p e CNO, Diagrama H-R interativo e Evolução de Gigantes Vermelhas, Anãs Brancas e Supernovas de Colapso de Núcleo.
 
 class StellarSimulation {
