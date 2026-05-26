@@ -1,4 +1,5 @@
 // ASTROPHYSICS LAB - STELLAR SIMULATION (js/stellar.js)
+// Física Estelar Avançada: Fusão Termonuclear p-p e CNO, Diagrama H-R interativo e Evolução de Gigantes Vermelhas, Anãs Brancas e Supernovas de Colapso de Núcleo.
 
 class StellarSimulation {
     constructor() {
