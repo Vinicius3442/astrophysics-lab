@@ -320,6 +320,33 @@ class BlackHoleSimulation {
                     ray_pos += ray_dir * dt;
                     float z_curr = ray_pos.z;
 
+                    // E. Volumetric Quasar Relativistic Jets (raymarching aditive accumulation)
+                    if (u_bh_type > 1.5) {
+                        float d_axis = length(ray_pos.xy);
+                        // Highly collimated jet radius that expands very slightly as we go further along Z
+                        float jet_width = u_rs * (0.35 + abs(ray_pos.z) * 0.08);
+                        
+                        // Smooth collimation profile
+                        float collimation = smoothstep(jet_width * 2.2, jet_width * 0.2, d_axis);
+                        
+                        if (collimation > 0.001) {
+                            // Exponential radial decay away from singularity core
+                            float radial_decay = exp(-r * 0.16);
+                            
+                            // High-frequency noise moving at ultra-relativistic speeds along the jet (time offset along Z-axis)
+                            float jet_noise = noise(vec3(ray_pos.xy * 8.0, ray_pos.z * 2.2 - u_time * 6.5));
+                            
+                            // High energy purple/blue plasma color
+                            vec3 jet_color = mix(vec3(0.42, 0.08, 0.98), vec3(0.0, 0.65, 1.0), jet_noise);
+                            
+                            // Step intensity integration: aditive blend modulated by density
+                            float step_intensity = collimation * radial_decay * (0.3 + 0.7 * jet_noise) * u_accretion_rate * dt * 4.2;
+                            
+                            // accumulate volumetric lighting with opacity subtraction from accretion disk
+                            color += jet_color * step_intensity * (1.0 - accumulated_disk_alpha);
+                        }
+                    }
+
                     // Did ray cross z=0 equatorial disk plane?
                     if ((z_prev > 0.0 && z_curr < 0.0) || (z_prev < 0.0 && z_curr > 0.0)) {
                         // Interpolate precise plane cross point
