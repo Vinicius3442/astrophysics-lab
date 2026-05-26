@@ -1,4 +1,5 @@
 // ASTROPHYSICS LAB - BLACK HOLE SCHWARZSCHILD SHADER ENGINE (js/blackhole.js)
+// Relatividade Geral: Gargantua em 3D Real com Órbita e Zoom no mouse por Raymarching de Geodésicas de Schwarzschild integradas no Fragment Shader GLSL na GPU.
 // Relatividade Geral: Traçado Geodésico Nulo de Schwarzschild, Lente Gravitacional de Einstein, Disco de Acreção com Doppler Beaming e Redshift Gravitacional na GPU.
 
 class BlackHoleSimulation {
