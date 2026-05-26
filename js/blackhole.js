@@ -361,32 +361,54 @@ class BlackHoleSimulation {
         const ctx = canvas.getContext("2d");
 
         // Pitch black cosmos background
-        ctx.fillStyle = "#020105";
+        ctx.fillStyle = "#010103";
         ctx.fillRect(0, 0, size, size);
 
-        // Milky Way dust lanes and celestial gas nebula
-        const grad = ctx.createRadialGradient(size/2, size/2, 20, size/2, size/2, size * 0.48);
-        grad.addColorStop(0, "rgba(95, 45, 140, 0.16)");
-        grad.addColorStop(0.35, "rgba(45, 65, 160, 0.08)");
-        grad.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.fillStyle = grad;
+        // Overlapping rich space nebulas
+        // 1. Central violet-purple core
+        const grad1 = ctx.createRadialGradient(size/2, size/2, 50, size/2, size/2, size * 0.5);
+        grad1.addColorStop(0, "rgba(120, 40, 180, 0.22)");
+        grad1.addColorStop(0.4, "rgba(50, 25, 120, 0.12)");
+        grad1.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = grad1;
         ctx.fillRect(0, 0, size, size);
 
-        // Add 900 pinpoint stars
-        ctx.fillStyle = "#ffffff";
-        for (let i = 0; i < 900; i++) {
+        // 2. Secondary offset deep teal nebula lane
+        const grad2 = ctx.createRadialGradient(size * 0.3, size * 0.4, 20, size * 0.3, size * 0.4, size * 0.4);
+        grad2.addColorStop(0, "rgba(0, 180, 210, 0.14)");
+        grad2.addColorStop(0.5, "rgba(0, 80, 150, 0.06)");
+        grad2.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = grad2;
+        ctx.fillRect(0, 0, size, size);
+
+        // 3. Diagonal cosmic dust lane (magenta-orange clouds)
+        const grad3 = ctx.createLinearGradient(0, 0, size, size);
+        grad3.addColorStop(0.1, "rgba(0,0,0,0)");
+        grad3.addColorStop(0.45, "rgba(220, 60, 110, 0.07)");
+        grad3.addColorStop(0.55, "rgba(240, 120, 30, 0.05)");
+        grad3.addColorStop(0.9, "rgba(0,0,0,0)");
+        ctx.fillStyle = grad3;
+        ctx.fillRect(0, 0, size, size);
+
+        // Add 3800 pinpoint stars (highly dense deep space)
+        for (let i = 0; i < 3800; i++) {
             const x = Math.random() * size;
             const y = Math.random() * size;
-            const r = 0.5 + Math.random() * 1.5;
+            // Diverse radii (mostly sub-pixel pinpoint stars, a few larger bright stars)
+            const rand = Math.random();
+            const r = rand < 0.85 ? 0.3 + Math.random() * 0.6 : 0.9 + Math.random() * 0.9;
             
-            // Warm vs Hot color spectrum distribution
+            // Rich color spectrum distribution
             const cType = Math.random();
-            if (cType < 0.22) {
-                ctx.fillStyle = "rgba(170, 215, 255, " + (0.55 + Math.random()*0.4) + ")"; // hot blue
-            } else if (cType < 0.38) {
-                ctx.fillStyle = "rgba(255, 220, 180, " + (0.55 + Math.random()*0.4) + ")"; // warm orange
+            const alpha = 0.3 + Math.random() * 0.7;
+            if (cType < 0.25) {
+                ctx.fillStyle = `rgba(165, 220, 255, ${alpha})`; // hot blue-white
+            } else if (cType < 0.45) {
+                ctx.fillStyle = `rgba(255, 200, 150, ${alpha})`; // warm solar orange
+            } else if (cType < 0.55) {
+                ctx.fillStyle = `rgba(255, 240, 190, ${alpha})`; // warm yellow-white
             } else {
-                ctx.fillStyle = "rgba(255, 255, 255, " + (0.65 + Math.random()*0.35) + ")";
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`; // pure white
             }
 
             ctx.beginPath();
