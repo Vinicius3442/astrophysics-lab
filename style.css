@@ -341,9 +341,9 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
-    transform: scale(1.3);
-    background: var(--accent-blue);
-    box-shadow: var(--glow-blue);
+    transform: scale(1.35);
+    background: var(--accent-cyan);
+    box-shadow: 0 0 10px var(--accent-cyan), 0 0 20px var(--accent-cyan);
 }
 
 /* Buttons Design */
