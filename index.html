@@ -250,6 +250,10 @@ a³ = 1.00 | Razão T²/a³ = 1.000</div>
                                 <span class="metric-value" id="metric-s-r">1.00 R<sub>&odot;</sub></span>
                             </div>
                             <div class="metric-row">
+                                <span class="metric-label">Classificação</span>
+                                <span class="metric-value" id="metric-s-class" style="color: var(--accent-cyan); font-weight: bold;">Anã Amarela (G2V)</span>
+                            </div>
+                            <div class="metric-row">
                                 <span class="metric-label">Temperatura Central (Tc)</span>
                                 <span class="metric-value" id="metric-s-tc">15.6 M K</span>
                             </div>
@@ -277,6 +281,29 @@ a³ = 1.00 | Razão T²/a³ = 1.000</div>
                             <canvas id="hr-canvas"></canvas>
                         </div>
                         <p style="font-size: 0.65rem; color: var(--text-secondary); text-align: center; margin-top: 4px;">Clique/arraste no gráfico para posicionar a estrela</p>
+                    </div>
+
+                    <div class="control-group" style="border-color: var(--accent-cyan);">
+                        <h3>Estrelas Reais & Objetos Exóticos</h3>
+                        <div class="control-item" style="margin-bottom: 8px;">
+                            <label class="control-label" style="font-size: 0.78rem; margin-bottom: 4px; color: var(--accent-cyan);">Selecione um Objeto</label>
+                            <select id="select-s-exotic" class="num-input" style="width: 100%; text-align: left; padding: 6px 12px; height: auto;">
+                                <option value="custom">-- Estrela Customizada (Use Sliders) --</option>
+                                <optgroup label="Estrelas da Sequência Principal">
+                                    <option value="sun">Sol (Classe G2V, Gás Comum)</option>
+                                    <option value="sirius">Sirius A (Classe A1V, Estrela Brilhante)</option>
+                                    <option value="proxima">Próxima Centauri (Classe M5.5V, Anã Vermelha)</option>
+                                </optgroup>
+                                <optgroup label="Supergigantes Reais">
+                                    <option value="stephenson">Stephenson 2-18 (Hipergigante Vermelha Extrema)</option>
+                                    <option value="etacarinae">Eta Carinae (Variável Luminosa Azul Instável)</option>
+                                </optgroup>
+                                <optgroup label="Objetos Exóticos / Extremos">
+                                    <option value="wolf_rayet">Estrela Wolf-Rayet (Supervento e Jatos Polares)</option>
+                                    <option value="tzo">Objeto Thorne-Żytkow (TZO - Casca Convectiva + Núcleo de Nêutrons)</option>
+                                </optgroup>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="control-group">

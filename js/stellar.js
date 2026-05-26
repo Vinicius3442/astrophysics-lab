@@ -29,6 +29,8 @@ class StellarSimulation {
         // Register in global scope
         window.AstrophysicsLab.simulations['stellar'] = this;
         
+        this.selectedExotic = 'custom';
+        
         // Initializations
         this.initUI();
         this.initThree();
@@ -55,10 +57,12 @@ class StellarSimulation {
         this.metricTc = document.getElementById("metric-s-tc");
         this.metricPres = document.getElementById("metric-s-pres");
         this.metricTime = document.getElementById("metric-s-time");
+        this.metricClass = document.getElementById("metric-s-class");
         
         this.btnEvolve = document.getElementById("btn-s-evolve");
         this.btnReset = document.getElementById("btn-s-reset");
         this.toggleInternal = document.getElementById("toggle-s-internal");
+        this.selectExotic = document.getElementById("select-s-exotic");
         
         // Alert Modal Elements
         this.alertModal = document.getElementById("stellar-alert");
@@ -169,6 +173,76 @@ class StellarSimulation {
             // The simulation remains showing the remanent in 3D!
             // The user can rotate/zoom and clicks the Reset button manually to restart
         });
+
+        // 2. Real & Exotic Stars Select Event Listener (Simulated API Fetch)
+        this.selectExotic.addEventListener("change", (e) => {
+            const val = e.target.value;
+            this.selectedExotic = val;
+            if (val === 'custom') {
+                this.sliderMass.disabled = false;
+                this.sliderTemp.disabled = false;
+                this.numMass.disabled = false;
+                this.numTemp.disabled = false;
+                this.btnEvolve.style.display = 'block';
+                
+                this.mass = parseFloat(this.sliderMass.value);
+                this.temp = parseFloat(this.sliderTemp.value);
+                this.updateStellarPhysics();
+                this.createMagneticLoops();
+                this.updateExoticVisuals(val);
+                return;
+            }
+
+            const catalog = {
+                sun: { mass: 1.0, temp: 5778, label: "Sol", type: "Anã Amarela (G2V)" },
+                sirius: { mass: 2.02, temp: 9940, label: "Sirius A", type: "Estrela Branca (A1V)" },
+                proxima: { mass: 0.12, temp: 3040, label: "Próxima Centauri", type: "Anã Vermelha (M5.5V)" },
+                stephenson: { mass: 25.0, temp: 3200, label: "Stephenson 2-18", type: "Hipergigante Vermelha (M6)" },
+                etacarinae: { mass: 25.0, temp: 36000, label: "Eta Carinae", type: "Variável Luminosa Azul (LBV)" },
+                wolf_rayet: { mass: 20.0, temp: 45000, label: "Wolf-Rayet", type: "Estrela Wolf-Rayet (WR)" },
+                tzo: { mass: 15.0, temp: 3000, label: "Objeto Thorne-Żytkow", type: "Objeto Thorne-Żytkow (TZO)" }
+            };
+
+            const star = catalog[val];
+            if (star) {
+                this.metricClass.textContent = "Buscando dados da API...";
+                this.metricClass.style.color = "var(--accent-yellow)";
+                
+                setTimeout(() => {
+                    if (this.selectedExotic !== val) return;
+                    
+                    this.mass = star.mass;
+                    this.temp = star.temp;
+                    
+                    this.sliderMass.value = this.mass;
+                    this.numMass.value = this.mass;
+                    this.sliderTemp.value = this.temp;
+                    this.numTemp.value = this.temp;
+
+                    this.sliderMass.disabled = true;
+                    this.sliderTemp.disabled = true;
+                    this.numMass.disabled = true;
+                    this.numTemp.disabled = true;
+
+                    if (val === 'stephenson') {
+                        this.lum = 440000;
+                        this.radius = 2150;
+                    } else if (val === 'etacarinae') {
+                        this.lum = 5000000;
+                        this.radius = 240;
+                    } else {
+                        this.lum = Math.pow(this.mass, 3.5);
+                    }
+
+                    this.updateStellarPhysics();
+                    this.createMagneticLoops();
+                    this.updateExoticVisuals(val);
+                    
+                    this.metricClass.textContent = star.type;
+                    this.metricClass.style.color = "var(--accent-cyan)";
+                }, 400);
+            }
+        });
     }
 
     initThree() {
@@ -206,15 +280,94 @@ class StellarSimulation {
         // Star 3D Geometry (highly detailed)
         this.starGeo = new THREE.SphereGeometry(1.0, 64, 64);
         
-        // Star Material - Custom Fresnel/Plasma Glow Effect simulation
-        this.starMat = new THREE.MeshPhongMaterial({
-            color: 0xffd700,
-            emissive: 0x221100,
-            shininess: 90,
+        // Custom Shader Material for realistic bubbling plasma surface
+        this.starMat = new THREE.ShaderMaterial({
+            uniforms: {
+                u_time: { value: 0.0 },
+                u_color: { value: new THREE.Color(0xffd700) },
+                u_opacity: { value: 1.0 }
+            },
             transparent: false,
-            opacity: 1.0
+            opacity: 1.0,
+            vertexShader: `
+                varying vec3 vNormal;
+                varying vec3 vPosition;
+                void main() {
+                    vNormal = normalize(normalMatrix * normal);
+                    vPosition = position;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform float u_time;
+                uniform vec3 u_color;
+                uniform float u_opacity;
+                varying vec3 vNormal;
+                varying vec3 vPosition;
+
+                float hash(vec3 p) {
+                    p = fract(p * 0.3183099 + vec3(0.1));
+                    p *= 17.0;
+                    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+                }
+                float noise(vec3 x) {
+                    vec3 i = floor(x);
+                    vec3 f = fract(x);
+                    f = f * f * (3.0 - 2.0 * f);
+                    return mix(
+                        mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
+                            mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+                        mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
+                            mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z
+                    );
+                }
+                float fbm(vec3 p) {
+                    float v = 0.0;
+                    float a = 0.5;
+                    vec3 shift = vec3(100.0);
+                    for (int i = 0; i < 3; ++i) {
+                        v += a * noise(p);
+                        p = p * 2.0 + shift;
+                        a *= 0.5;
+                    }
+                    return v;
+                }
+                void main() {
+                    vec3 coord = vPosition * 4.5;
+                    coord.y -= u_time * 0.38;
+                    coord.x += sin(u_time * 0.12) * 0.15;
+                    
+                    float n = fbm(coord);
+                    
+                    vec3 baseColor = u_color;
+                    vec3 hotColor = mix(baseColor, vec3(1.0, 1.0, 0.95), 0.52);
+                    vec3 coolColor = mix(baseColor, vec3(0.25, 0.03, 0.0), 0.65);
+                    
+                    // Adjust cool color to deep blue if star is a blue/white O-B type
+                    if (u_color.b > 0.8 && u_color.r < 0.3) {
+                        coolColor = mix(baseColor, vec3(0.0, 0.05, 0.28), 0.65);
+                    }
+                    
+                    vec3 surfaceColor = mix(coolColor, hotColor, n);
+                    
+                    // Fresnel edge glow
+                    float ndotv = dot(normalize(vNormal), vec3(0.0, 0.0, 1.0));
+                    float rim = pow(1.0 - max(0.0, ndotv), 2.8);
+                    
+                    vec3 finalColor = surfaceColor + baseColor * rim * 0.95;
+                    
+                    gl_FragColor = vec4(finalColor, u_opacity);
+                }
+            `
         });
         
+        // Intercept color updates dynamically to work with uniforms
+        this.starMat.color = {
+            setHex: (hex) => {
+                this.starMat.uniforms.u_color.value.setHex(hex);
+            }
+        };
+
         this.starMesh = new THREE.Mesh(this.starGeo, this.starMat);
         this.scene.add(this.starMesh);
 
@@ -229,6 +382,15 @@ class StellarSimulation {
         });
         this.coronaMesh = new THREE.Mesh(this.coronaGeo, this.coronaMat);
         this.scene.add(this.coronaMesh);
+
+        // Magnetic Loops Group (Bezier Curves)
+        this.magneticLoopsGroup = new THREE.Group();
+        this.scene.add(this.magneticLoopsGroup);
+        this.magneticLoops = [];
+
+        // Exotic Effects Group (Wolf-Rayet polar jets & winds)
+        this.exoticEffectsGroup = new THREE.Group();
+        this.scene.add(this.exoticEffectsGroup);
 
         // ==========================================
         // INTERNAL LAYERS & PARTICLES (CROSS SECTION)
@@ -419,7 +581,7 @@ class StellarSimulation {
             // Bound inside slider values
             this.temp = Math.max(2000, Math.min(this.temp, 40000));
             this.sliderTemp.value = this.temp;
-            this.valTemp.textContent = this.temp;
+            this.numTemp.value = this.temp;
             
             // Map Mass and Luminosity along the Main Sequence
             const tRatio = this.temp / 5778;
@@ -428,7 +590,7 @@ class StellarSimulation {
             this.lum = Math.pow(this.mass, 3.5);
             
             this.sliderMass.value = this.mass.toFixed(1);
-            this.valMass.textContent = this.mass.toFixed(1);
+            this.numMass.value = this.mass.toFixed(1);
 
             this.updateStellarPhysics();
         };
@@ -573,6 +735,30 @@ class StellarSimulation {
         this.coronaMat.color.setHex(hexColor);
         this.starLight.color.setHex(hexColor);
 
+        // Update spectral classification label for custom star
+        if (this.selectedExotic === 'custom') {
+            let mkType = "Anã da Sequência Principal";
+            if (this.radius > 3.0) mkType = "Gigante Estelar";
+            if (this.radius > 12.0) mkType = "Supergigante Estelar";
+            
+            let mkClass = "G";
+            if (this.temp < 3700) mkClass = "Classe M";
+            else if (this.temp < 5200) mkClass = "Classe K";
+            else if (this.temp < 6000) mkClass = "Classe G";
+            else if (this.temp < 7500) mkClass = "Classe F";
+            else if (this.temp < 10000) mkClass = "Classe A";
+            else if (this.temp < 30000) mkClass = "Classe B";
+            else mkClass = "Classe O";
+            
+            this.metricClass.textContent = `${mkType} (${mkClass})`;
+            this.metricClass.style.color = "var(--accent-cyan)";
+        }
+
+        // Recreate magnetic loops to fit new radius
+        if (this.createMagneticLoops) {
+            this.createMagneticLoops();
+        }
+
         // Update UI
         this.valLum.textContent = window.formatScientific(this.lum);
         this.metricRadius.textContent = this.radius.toFixed(2) + " R⊙";
@@ -588,11 +774,162 @@ class StellarSimulation {
             this.metricTime.textContent = this.lifetime.toFixed(2) + " Bilhões anos";
         }
 
-        // Nuclear bars update
-        this.valPP.textContent = Math.round(this.ppFraction * 100) + "%";
-        this.valCNO.textContent = Math.round(this.cnoFraction * 100) + "%";
         this.barPP.style.width = (this.ppFraction * 100) + "%";
         this.barCNO.style.width = (this.cnoFraction * 100) + "%";
+    }
+
+    createMagneticLoops() {
+        if (!this.magneticLoopsGroup) return;
+        
+        // Clear old loops
+        while (this.magneticLoopsGroup.children.length > 0) {
+            this.magneticLoopsGroup.remove(this.magneticLoopsGroup.children[0]);
+        }
+        this.magneticLoops = [];
+
+        if (this.state === 'white_dwarf' || this.state === 'remanent' || this.state === 'nebula' || this.state === 'collapsing' || this.state === 'explosion') return;
+
+        const loopCount = 6;
+        const starRadius = Math.max(0.2, Math.min(this.radius * 0.7, 2.0));
+
+        for (let i = 0; i < loopCount; i++) {
+            // Pick a random surface point P1
+            const theta1 = Math.random() * Math.PI * 2;
+            const phi1 = Math.acos((Math.random() * 2) - 1);
+            const p1 = new THREE.Vector3(
+                Math.sin(phi1) * Math.cos(theta1),
+                Math.sin(phi1) * Math.sin(theta1),
+                Math.cos(phi1)
+            ).multiplyScalar(starRadius);
+
+            // Pick a second point P2 close to P1
+            const theta2 = theta1 + (Math.random() - 0.5) * 0.6;
+            const phi2 = phi1 + (Math.random() - 0.5) * 0.6;
+            const p2 = new THREE.Vector3(
+                Math.sin(phi2) * Math.cos(theta2),
+                Math.sin(phi2) * Math.sin(theta2),
+                Math.cos(phi2)
+            ).multiplyScalar(starRadius);
+
+            // Midpoint and radial normal
+            const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+            const normal = mid.clone().normalize();
+            
+            // Extrude control point radially to create arch height
+            const loopHeight = starRadius * (0.12 + Math.random() * 0.18);
+            const cp = mid.clone().add(normal.multiplyScalar(loopHeight));
+
+            // Create Bezier curve
+            const curve = new THREE.QuadraticBezierCurve3(p1, cp, p2);
+            const points = curve.getPoints(24);
+            const curveGeo = new THREE.BufferGeometry().setFromPoints(points);
+
+            // Glowing line material
+            const lineMat = new THREE.LineBasicMaterial({
+                color: this.getStarHexColor(),
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending
+            });
+
+            const line = new THREE.Line(curveGeo, lineMat);
+            this.magneticLoopsGroup.add(line);
+
+            // Add an animated flare particle along the arch
+            const flareGeo = new THREE.SphereGeometry(starRadius * 0.02, 8, 8);
+            const flareMat = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.85,
+                blending: THREE.AdditiveBlending
+            });
+            const flare = new THREE.Mesh(flareGeo, flareMat);
+            this.magneticLoopsGroup.add(flare);
+
+            this.magneticLoops.push({
+                line: line,
+                flare: flare,
+                curve: curve,
+                progress: Math.random(),
+                speed: 0.006 + Math.random() * 0.012,
+                p1: p1,
+                p2: p2,
+                cp: cp
+            });
+        }
+    }
+
+    updateExoticVisuals(val) {
+        if (!this.exoticEffectsGroup) return;
+        
+        // Clear old ones
+        while (this.exoticEffectsGroup.children.length > 0) {
+            this.exoticEffectsGroup.remove(this.exoticEffectsGroup.children[0]);
+        }
+        
+        this.windPoints = null;
+
+        if (val === 'wolf_rayet') {
+            const starRadius = Math.max(0.2, Math.min(this.radius * 0.7, 2.0));
+            
+            // Polar Jet Up
+            const jetGeoUp = new THREE.CylinderGeometry(0.01, starRadius * 0.25, starRadius * 5.0, 16, 1, true);
+            jetGeoUp.translate(0, starRadius * 2.5, 0);
+            const jetMat = new THREE.MeshBasicMaterial({
+                color: 0x00f5d4,
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending,
+                side: THREE.DoubleSide
+            });
+            const jetUp = new THREE.Mesh(jetGeoUp, jetMat);
+            this.exoticEffectsGroup.add(jetUp);
+
+            // Polar Jet Down
+            const jetGeoDown = new THREE.CylinderGeometry(0.01, starRadius * 0.25, starRadius * 5.0, 16, 1, true);
+            jetGeoDown.translate(0, starRadius * 2.5, 0);
+            const jetDown = new THREE.Mesh(jetGeoDown, jetMat);
+            jetDown.rotation.x = Math.PI;
+            this.exoticEffectsGroup.add(jetDown);
+
+            // Outward wind particles
+            this.windCount = 200;
+            this.windGeo = new THREE.BufferGeometry();
+            this.windPositions = new Float32Array(this.windCount * 3);
+            this.windSpeeds = new Float32Array(this.windCount);
+            this.windDirections = new Float32Array(this.windCount * 3);
+            
+            for (let i = 0; i < this.windCount; i++) {
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos((Math.random() * 2) - 1);
+                const dir = new THREE.Vector3(
+                    Math.sin(phi) * Math.cos(theta),
+                    Math.sin(phi) * Math.sin(theta),
+                    Math.cos(phi)
+                );
+                this.windDirections[i*3] = dir.x;
+                this.windDirections[i*3+1] = dir.y;
+                this.windDirections[i*3+2] = dir.z;
+                
+                const r = starRadius * (1.0 + Math.random() * 1.8);
+                this.windPositions[i*3] = dir.x * r;
+                this.windPositions[i*3+1] = dir.y * r;
+                this.windPositions[i*3+2] = dir.z * r;
+                
+                this.windSpeeds[i] = 0.018 + Math.random() * 0.026;
+            }
+            
+            this.windGeo.setAttribute('position', new THREE.BufferAttribute(this.windPositions, 3));
+            const windMat = new THREE.PointsMaterial({
+                color: 0x00d2ff,
+                size: 0.04,
+                transparent: true,
+                opacity: 0.75,
+                blending: THREE.AdditiveBlending
+            });
+            this.windPoints = new THREE.Points(this.windGeo, windMat);
+            this.exoticEffectsGroup.add(this.windPoints);
+        }
     }
 
     getStarHexColor() {
@@ -695,6 +1032,12 @@ class StellarSimulation {
 
         this.controls.update();
 
+        // Update Shader time uniform
+        if (this.starMat.uniforms && this.starMat.uniforms.u_time) {
+            this.starMat.uniforms.u_time.value += 0.012;
+            this.starMat.uniforms.u_opacity.value = this.starMat.opacity;
+        }
+
         // Rotate the star for realistic convection feeling
         if (this.state !== 'nebula' && this.state !== 'remanent') {
             this.starMesh.rotation.y += 0.006;
@@ -704,6 +1047,52 @@ class StellarSimulation {
         // 0. ANIMATE CORE FUSION AND CONVECTION PARTICLES
         if (this.showInternal && this.state === 'main_sequence') {
             this.animateInternalLayers();
+        }
+
+        // Update magnetic loops and flares
+        if (this.state !== 'white_dwarf' && this.state !== 'remanent' && this.state !== 'nebula') {
+            if (this.magneticLoops && this.magneticLoops.length > 0) {
+                this.magneticLoopsGroup.visible = true;
+                this.magneticLoops.forEach(loop => {
+                    loop.progress += loop.speed;
+                    if (loop.progress > 1.0) loop.progress = 0.0;
+                    const pos = loop.curve.getPointAt(loop.progress);
+                    loop.flare.position.copy(pos);
+                });
+                this.magneticLoopsGroup.rotation.y += 0.006;
+                this.magneticLoopsGroup.rotation.x += 0.002;
+            }
+        } else {
+            if (this.magneticLoopsGroup) {
+                this.magneticLoopsGroup.visible = false;
+            }
+        }
+
+        // Animate wind particles if Wolf-Rayet is active
+        if (this.selectedExotic === 'wolf_rayet' && this.windPoints) {
+            const starRadius = Math.max(0.2, Math.min(this.radius * 0.7, 2.0));
+            const posAttr = this.windPoints.geometry.attributes.position;
+            const pos = posAttr.array;
+            
+            for (let i = 0; i < this.windCount; i++) {
+                const dx = this.windDirections[i*3];
+                const dy = this.windDirections[i*3+1];
+                const dz = this.windDirections[i*3+2];
+                const speed = this.windSpeeds[i];
+                
+                pos[i*3] += dx * speed;
+                pos[i*3+1] += dy * speed;
+                pos[i*3+2] += dz * speed;
+                
+                const r = Math.sqrt(pos[i*3]*pos[i*3] + pos[i*3+1]*pos[i*3+1] + pos[i*3+2]*pos[i*3+2]);
+                if (r > starRadius * 3.0) {
+                    const resetR = starRadius;
+                    pos[i*3] = dx * resetR;
+                    pos[i*3+1] = dy * resetR;
+                    pos[i*3+2] = dz * resetR;
+                }
+            }
+            posAttr.needsUpdate = true;
         }
 
         // Draw the HR Diagram at 30 FPS or when active
@@ -816,9 +1205,19 @@ class StellarSimulation {
         }
         this.convectionParticles.geometry.attributes.position.needsUpdate = true;
 
-        // Pulsate the core sphere for realism
-        const coreScale = scaleFactor * (1.0 + Math.sin(performance.now() * 0.015) * 0.04);
-        this.coreMesh.scale.setScalar(coreScale);
+        // Pulsate the core sphere for realism (neutron core override for TZO)
+        if (this.selectedExotic === 'tzo') {
+            this.coreMesh.material.color.setHex(0x00f5d4);
+            // Pulsate extremely fast to represent a high-rotation degenerate neutron core
+            const tzoScale = scaleFactor * 0.35 * (1.0 + Math.sin(performance.now() * 0.08) * 0.22);
+            this.coreMesh.scale.setScalar(tzoScale);
+        } else {
+            if (this.coreMesh.material.color) {
+                this.coreMesh.material.color.setHex(0xffffff);
+            }
+            const coreScale = scaleFactor * (1.0 + Math.sin(performance.now() * 0.015) * 0.04);
+            this.coreMesh.scale.setScalar(coreScale);
+        }
         
         const radScale = scaleFactor;
         this.radiativeMesh.scale.setScalar(radScale);
