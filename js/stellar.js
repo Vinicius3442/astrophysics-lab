@@ -892,39 +892,48 @@ class StellarSimulation {
             jetDown.rotation.x = Math.PI;
             this.exoticEffectsGroup.add(jetDown);
 
-            // Outward wind particles
-            this.windCount = 200;
+            // Outward wind particles - Powered by Castor, Abbott & Klein (CAK) Line-Driven Wind Theory
+            // v(r) = v_inf * (1.0 - R_star / r)^beta
+            this.windCount = 350;
             this.windGeo = new THREE.BufferGeometry();
             this.windPositions = new Float32Array(this.windCount * 3);
             this.windSpeeds = new Float32Array(this.windCount);
             this.windDirections = new Float32Array(this.windCount * 3);
+            this.windRadii = new Float32Array(this.windCount); // track current distance from star center
             
             for (let i = 0; i < this.windCount; i++) {
                 const theta = Math.random() * Math.PI * 2;
                 const phi = Math.acos((Math.random() * 2) - 1);
+                
+                // Helical spiral MHD factor combined with CAK radial direction
                 const dir = new THREE.Vector3(
                     Math.sin(phi) * Math.cos(theta),
                     Math.sin(phi) * Math.sin(theta),
                     Math.cos(phi)
-                );
+                ).normalize();
+                
                 this.windDirections[i*3] = dir.x;
                 this.windDirections[i*3+1] = dir.y;
                 this.windDirections[i*3+2] = dir.z;
                 
-                const r = starRadius * (1.0 + Math.random() * 1.8);
+                // Start at a random radius between surface and outer wind boundary
+                const r = starRadius * (1.0 + Math.random() * 2.2);
+                this.windRadii[i] = r;
+                
                 this.windPositions[i*3] = dir.x * r;
                 this.windPositions[i*3+1] = dir.y * r;
                 this.windPositions[i*3+2] = dir.z * r;
                 
-                this.windSpeeds[i] = 0.018 + Math.random() * 0.026;
+                // Initial wind speed
+                this.windSpeeds[i] = 0.015;
             }
             
             this.windGeo.setAttribute('position', new THREE.BufferAttribute(this.windPositions, 3));
             const windMat = new THREE.PointsMaterial({
-                color: 0x00d2ff,
-                size: 0.04,
+                color: 0x00f5d4,
+                size: 0.045,
                 transparent: true,
-                opacity: 0.75,
+                opacity: 0.85,
                 blending: THREE.AdditiveBlending
             });
             this.windPoints = new THREE.Points(this.windGeo, windMat);
@@ -1068,28 +1077,46 @@ class StellarSimulation {
             }
         }
 
-        // Animate wind particles if Wolf-Rayet is active
+        // Animate wind particles if Wolf-Rayet is active - Powered by Castor, Abbott & Klein (CAK) Theory
         if (this.selectedExotic === 'wolf_rayet' && this.windPoints) {
             const starRadius = Math.max(0.2, Math.min(this.radius * 0.7, 2.0));
             const posAttr = this.windPoints.geometry.attributes.position;
             const pos = posAttr.array;
             
+            const v_inf = 0.055; // Terminal velocity constant in simulation space
+            const beta = 0.8;    // CAK line acceleration factor
+            
             for (let i = 0; i < this.windCount; i++) {
                 const dx = this.windDirections[i*3];
                 const dy = this.windDirections[i*3+1];
                 const dz = this.windDirections[i*3+2];
-                const speed = this.windSpeeds[i];
                 
-                pos[i*3] += dx * speed;
-                pos[i*3+1] += dy * speed;
-                pos[i*3+2] += dz * speed;
+                // CAK Velocity equation: v(r) = v_inf * (1.0 - R_star / r)^beta
+                let curR = this.windRadii[i];
+                let v_cak = v_inf * Math.pow(1.0 - (starRadius / Math.max(starRadius + 0.01, curR)), beta);
+                v_cak = Math.max(0.005, v_cak); // clamp speed floor
                 
-                const r = Math.sqrt(pos[i*3]*pos[i*3] + pos[i*3+1]*pos[i*3+1] + pos[i*3+2]*pos[i*3+2]);
-                if (r > starRadius * 3.0) {
-                    const resetR = starRadius;
-                    pos[i*3] = dx * resetR;
-                    pos[i*3+1] = dy * resetR;
-                    pos[i*3+2] = dz * resetR;
+                // Update position
+                pos[i*3] += dx * v_cak;
+                pos[i*3+1] += dy * v_cak;
+                pos[i*3+2] += dz * v_cak;
+                
+                // Add winding helical rotation from magnetic twisting (MHD spiral)
+                const rotSpeed = 0.02 / (curR / starRadius);
+                const xOld = pos[i*3];
+                const zOld = pos[i*3+2];
+                pos[i*3] = xOld * Math.cos(rotSpeed) - zOld * Math.sin(rotSpeed);
+                pos[i*3+2] = xOld * Math.sin(rotSpeed) + zOld * Math.cos(rotSpeed);
+                
+                // Accumulate distance
+                this.windRadii[i] += v_cak;
+                
+                // Escape boundaries reset
+                if (this.windRadii[i] > starRadius * 3.2) {
+                    this.windRadii[i] = starRadius * (1.0 + Math.random() * 0.1);
+                    pos[i*3] = dx * this.windRadii[i];
+                    pos[i*3+1] = dy * this.windRadii[i];
+                    pos[i*3+2] = dz * this.windRadii[i];
                 }
             }
             posAttr.needsUpdate = true;
@@ -1119,6 +1146,7 @@ class StellarSimulation {
     }
 
     animateInternalLayers() {
+        const fract = (val) => val - Math.floor(val);
         // 1. Fusion Particles inside Core
         const fusionPos = this.fusionParticles.geometry.attributes.position.array;
         const fusionColors = this.fusionParticles.geometry.attributes.color.array;
@@ -1178,30 +1206,65 @@ class StellarSimulation {
         this.fusionParticles.geometry.attributes.position.needsUpdate = true;
         this.fusionParticles.geometry.attributes.color.needsUpdate = true;
 
-        // 2. Convection Toroidal Cells Currents
+        // 2. Convection Toroidal Cells Currents (TZO Magnetospheric Dipole funnel override)
         const convPos = this.convectionParticles.geometry.attributes.position.array;
+        
+        // Thorne-Zytkow Object (TZO) Dipole Field Funneling Equations:
+        // Envelope plasma is sucked along magnetic dipole field lines B(r) = (mu/r^3) * [3*n*(m.n) - m]
+        const isTZO = (this.selectedExotic === 'tzo');
+        const magneticAxis = new THREE.Vector3(0, 1, 0); // aligned with rot poles
+        
         for (let i = 0; i < this.convectionCount; i++) {
             const state = this.convectionStates[i];
             
-            // toroidal rotation convection phase
-            state.phase += state.speed;
-            state.theta += 0.003; // rotate around polar axis
+            if (isTZO) {
+                // Advance convective fall cycle
+                state.phase += state.speed * 0.65;
+                state.theta += 0.015; // wrap around poles rapidly
+                
+                // Spherical collapse coordinates
+                const r_outer = 1.0 * scaleFactor;
+                const r_ns = 0.08 * scaleFactor; // Neutron star radius limit
+                
+                // Gravity sucks envelope plasma from outer shell to inner NS boundary
+                const radialPos = r_outer - (r_outer - r_ns) * (fract(state.phase / (Math.PI * 2.0)));
+                
+                // Funnel along magnetic field line coordinates. Dipole equation:
+                // sin^2(lat) / r = constant => lat = asin(sqrt(r / r_max))
+                const maxR = r_outer;
+                const lat = Math.asin(Math.sqrt(radialPos / maxR));
+                
+                // Alternating poles routing (funnel into north pole vs south pole)
+                const hemisphere = (i % 2 === 0) ? 1.0 : -1.0;
+                
+                // Coordinates mapping Lorentz dipole helical spiral
+                const x = Math.cos(lat * hemisphere) * Math.cos(state.theta) * radialPos;
+                const y = Math.sin(lat * hemisphere) * radialPos;
+                const z = Math.cos(lat * hemisphere) * Math.sin(state.theta) * radialPos;
+                
+                convPos[i*3] = x;
+                convPos[i*3+1] = y;
+                convPos[i*3+2] = z;
+            } else {
+                // Bénard Convective Toroidal scaling cell math
+                state.phase += state.speed;
+                state.theta += 0.003; // rotate around polar axis
 
-            // Bénard Convective Toroidal scaling cell math
-            const r_inner = 0.65 * scaleFactor;
-            const r_outer = 1.0 * scaleFactor;
-            const radialSpan = r_outer - r_inner;
-            
-            // Radius goes in loop from inner to outer boundary
-            const r = r_inner + (radialSpan * (Math.sin(state.phase) + 1.0) / 2.0);
-            
-            const x = Math.cos(state.yAngle) * Math.cos(state.theta) * r;
-            const y = Math.sin(state.yAngle) * r;
-            const z = Math.cos(state.yAngle) * Math.sin(state.theta) * r;
+                const r_inner = 0.65 * scaleFactor;
+                const r_outer = 1.0 * scaleFactor;
+                const radialSpan = r_outer - r_inner;
+                
+                // Radius goes in loop from inner to outer boundary
+                const r = r_inner + (radialSpan * (Math.sin(state.phase) + 1.0) / 2.0);
+                
+                const x = Math.cos(state.yAngle) * Math.cos(state.theta) * r;
+                const y = Math.sin(state.yAngle) * r;
+                const z = Math.cos(state.yAngle) * Math.sin(state.theta) * r;
 
-            convPos[i*3] = x;
-            convPos[i*3+1] = y;
-            convPos[i*3+2] = z;
+                convPos[i*3] = x;
+                convPos[i*3+1] = y;
+                convPos[i*3+2] = z;
+            }
         }
         this.convectionParticles.geometry.attributes.position.needsUpdate = true;
 
