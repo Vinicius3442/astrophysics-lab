@@ -26,6 +26,9 @@ class KeplerSimulation {
         // Create Scene Objects
         this.createSolarSystem();
         
+        // Initialize to 1st Law visual states now that Three.js objects are created
+        this.selectLawTab(1);
+        
         // Register in main controller
         window.AstrophysicsLab.simulations['kepler'] = this;
         
@@ -67,7 +70,7 @@ class KeplerSimulation {
         this.metricR = document.getElementById("metric-k-r");
 
         // 1. Study Modules Tab Controls
-        const selectLawTab = (lawNum) => {
+        this.selectLawTab = (lawNum) => {
             [this.btnLaw1, this.btnLaw2, this.btnLaw3].forEach((btn, idx) => {
                 btn.classList.remove("active");
                 if (idx + 1 === lawNum) btn.classList.add("active");
@@ -96,12 +99,9 @@ class KeplerSimulation {
             }
         };
 
-        this.btnLaw1.addEventListener("click", () => selectLawTab(1));
-        this.btnLaw2.addEventListener("click", () => selectLawTab(2));
-        this.btnLaw3.addEventListener("click", () => selectLawTab(3));
-        
-        // Initialize to 1st Law visual states on startup
-        selectLawTab(1);
+        this.btnLaw1.addEventListener("click", () => this.selectLawTab(1));
+        this.btnLaw2.addEventListener("click", () => this.selectLawTab(2));
+        this.btnLaw3.addEventListener("click", () => this.selectLawTab(3));
 
         // 2. Real Planets Dataset Selector
         this.selectPlanet.addEventListener("change", (e) => {
