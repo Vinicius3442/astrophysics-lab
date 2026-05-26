@@ -136,9 +136,19 @@
                         <h2>Mecânica Orbital</h2>
                         <p>Ajuste os parâmetros da órbita do planeta.</p>
                     </div>
+                    
+                    <!-- Seletor de Leis (Sub-abas) -->
+                    <div class="control-group" style="border-color: var(--accent-blue);">
+                        <h3>Módulos de Estudo (3 Leis)</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;">
+                            <button class="btn-secondary active" id="btn-k-law1" style="font-size: 0.65rem; padding: 8px 0; text-align: center; font-weight:700;">1ª LEI</button>
+                            <button class="btn-secondary" id="btn-k-law2" style="font-size: 0.65rem; padding: 8px 0; text-align: center; font-weight:700;">2ª LEI</button>
+                            <button class="btn-secondary" id="btn-k-law3" style="font-size: 0.65rem; padding: 8px 0; text-align: center; font-weight:700;">3ª LEI</button>
+                        </div>
+                    </div>
 
-                    <!-- Controles Principais -->
-                    <div class="control-group">
+                    <!-- Módulo 1ª Lei: Geometria -->
+                    <div class="control-group" id="group-k-law1">
                         <h3>Geometria da Órbita (1ª Lei)</h3>
                         <div class="control-item">
                             <div class="control-label">
@@ -154,9 +164,13 @@
                             </div>
                             <input type="range" id="slider-k-ecc" min="0.0" max="0.9" step="0.01" value="0.02">
                         </div>
+                        <p style="font-size:0.65rem; color:var(--text-secondary); line-height:1.3; margin-top:5px;">
+                            Exibe a trajetória elíptica com a estrela no foco principal e um marcador geométrico sutil no foco secundário vazio.
+                        </p>
                     </div>
 
-                    <div class="control-group">
+                    <!-- Módulo 2ª Lei: Áreas -->
+                    <div class="control-group" id="group-k-law2" style="display: none;">
                         <h3>Lei das Áreas (2ª Lei)</h3>
                         <div class="switch-container">
                             <span class="control-label" style="font-size: 0.8rem;">Visualizar Áreas Orbitais</span>
@@ -175,13 +189,29 @@
                         <div class="kepler-legend">
                             <div class="legend-item">
                                 <span class="legend-color" style="background: rgba(0, 245, 212, 0.4);"></span>
-                                <span>Área Varrida A<sub>1</sub> = A<sub>2</sub></span>
+                                <span>Área Varrida A₁ = A₂</span>
                             </div>
                         </div>
+                        <p style="font-size:0.65rem; color:var(--text-secondary); line-height:1.3; margin-top:5px;">
+                            O planeta varre áreas iguais em tempos iguais. Vetores exibem a Velocidade Tangencial (<span style="color:var(--accent-cyan); font-weight:600;">Ciano</span>) e a Força Gravitacional (<span style="color:var(--accent-red); font-weight:600;">Vermelho</span>).
+                        </p>
                     </div>
 
-                    <div class="control-group">
+                    <!-- Módulo 3ª Lei: Períodos -->
+                    <div class="control-group" id="group-k-law3" style="display: none;">
                         <h3>Lei dos Períodos (3ª Lei)</h3>
+                        <div class="control-item" style="margin-bottom: 8px;">
+                            <label class="control-label" style="font-size: 0.78rem; margin-bottom: 4px; color: var(--accent-blue);">Carregar Planeta Real</label>
+                            <select id="select-k-planet" class="num-input" style="width: 100%; text-align: left; padding: 6px 12px; height: auto;">
+                                <option value="custom">-- Customizado (Use sliders) --</option>
+                                <option value="mercury">Mercúrio (a = 0.39 UA, e = 0.206)</option>
+                                <option value="venus">Vênus (a = 0.72 UA, e = 0.007)</option>
+                                <option value="earth" selected>Terra (a = 1.00 UA, e = 0.017)</option>
+                                <option value="mars">Marte (a = 1.52 UA, e = 0.093)</option>
+                                <option value="jupiter">Júpiter (a = 5.20 UA, e = 0.048)</option>
+                                <option value="saturn">Saturno (a = 9.58 UA, e = 0.054)</option>
+                            </select>
+                        </div>
                         <div class="control-item">
                             <div class="control-label">
                                 <span>Massa da Estrela (M)</span>
@@ -194,6 +224,7 @@ T = 1.00 anos | T² = 1.00
 a³ = 1.00 | Razão T²/a³ = 1.000</div>
                     </div>
 
+                    <!-- Controles Comuns -->
                     <div class="control-group">
                         <h3>Controle de Simulação</h3>
                         <div class="control-item">
@@ -202,7 +233,7 @@ a³ = 1.00 | Razão T²/a³ = 1.000</div>
                             </div>
                             <input type="range" id="slider-k-speed" min="0" max="5" step="0.2" value="1">
                         </div>
-                        <button class="btn-secondary" id="btn-k-reset">Reiniciar Planeta</button>
+                        <button class="btn-secondary" id="btn-k-reset" style="width: 100%;">Reiniciar Planeta</button>
                     </div>
                 </div>
             </section>

@@ -74,41 +74,65 @@ function initStarfield() {
 function initTabs() {
     const tabButtons = document.querySelectorAll(".tab-btn");
     const simulationViews = document.querySelectorAll(".simulation-view");
+    const lobbyCards = document.querySelectorAll(".lobby-card");
     
+    function switchTab(targetTab) {
+        // Update Active Buttons in Nav Header
+        tabButtons.forEach(btn => {
+            btn.classList.remove("active");
+            if (btn.getAttribute("data-tab") === targetTab) {
+                btn.classList.add("active");
+            }
+        });
+        
+        // Switch Views
+        simulationViews.forEach(view => {
+            view.classList.remove("active");
+            if (view.id === `tab-${targetTab}`) {
+                view.classList.add("active");
+            }
+        });
+        
+        // Update global state active tracker
+        const oldTab = window.AstrophysicsLab.activeTab;
+        window.AstrophysicsLab.activeTab = targetTab;
+        
+        // Notify respective simulation objects of the tab change
+        Object.keys(window.AstrophysicsLab.simulations).forEach(key => {
+            const sim = window.AstrophysicsLab.simulations[key];
+            if (key === targetTab) {
+                if (sim && typeof sim.resume === 'function') {
+                    // Small delay to ensure the display transition is computed and width > 0
+                    setTimeout(() => {
+                        sim.resume();
+                    }, 50);
+                }
+            } else {
+                if (sim && typeof sim.pause === 'function') {
+                    sim.pause();
+                }
+            }
+        });
+        
+        // Auto resize triggers for Three.js renderers
+        setTimeout(() => {
+            window.dispatchEvent(new Event('resize'));
+        }, 150);
+    }
+    
+    // Header Nav clicks
     tabButtons.forEach(button => {
         button.addEventListener("click", () => {
             const targetTab = button.getAttribute("data-tab");
-            
-            // Update Active Buttons
-            tabButtons.forEach(btn => btn.classList.remove("active"));
-            button.classList.add("active");
-            
-            // Switch Views
-            simulationViews.forEach(view => {
-                view.classList.remove("active");
-                if (view.id === `tab-${targetTab}`) {
-                    view.classList.add("active");
-                }
-            });
-            
-            // Pause previous simulations and trigger active simulation
-            const oldTab = window.AstrophysicsLab.activeTab;
-            window.AstrophysicsLab.activeTab = targetTab;
-            
-            // Notify respective simulation objects of the tab change to optimize loop rendering
-            Object.keys(window.AstrophysicsLab.simulations).forEach(key => {
-                const sim = window.AstrophysicsLab.simulations[key];
-                if (key === targetTab) {
-                    if (sim && typeof sim.resume === 'function') sim.resume();
-                } else {
-                    if (sim && typeof sim.pause === 'function') sim.pause();
-                }
-            });
-            
-            // Auto resize triggers for Three.js renderers
-            setTimeout(() => {
-                window.dispatchEvent(new Event('resize'));
-            }, 100);
+            switchTab(targetTab);
+        });
+    });
+
+    // Lobby Cards clicks
+    lobbyCards.forEach(card => {
+        card.addEventListener("click", () => {
+            const targetTab = card.getAttribute("data-tab");
+            switchTab(targetTab);
         });
     });
 }

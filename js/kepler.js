@@ -34,6 +34,15 @@ class KeplerSimulation {
     }
 
     initUI() {
+        // Study Modules Buttons
+        this.btnLaw1 = document.getElementById("btn-k-law1");
+        this.btnLaw2 = document.getElementById("btn-k-law2");
+        this.btnLaw3 = document.getElementById("btn-k-law3");
+        
+        this.groupLaw1 = document.getElementById("group-k-law1");
+        this.groupLaw2 = document.getElementById("group-k-law2");
+        this.groupLaw3 = document.getElementById("group-k-law3");
+
         // Range Sliders
         this.sliderA = document.getElementById("slider-k-a");
         this.sliderEcc = document.getElementById("slider-k-ecc");
@@ -42,6 +51,7 @@ class KeplerSimulation {
         this.sliderSpeed = document.getElementById("slider-k-speed");
         this.toggleAreas = document.getElementById("toggle-k-areas");
         this.btnReset = document.getElementById("btn-k-reset");
+        this.selectPlanet = document.getElementById("select-k-planet");
         
         // Value Monitors
         this.valA = document.getElementById("val-k-a");
@@ -56,10 +66,84 @@ class KeplerSimulation {
         this.metricV = document.getElementById("metric-k-v");
         this.metricR = document.getElementById("metric-k-r");
 
-        // Event Listeners
+        // 1. Study Modules Tab Controls
+        const selectLawTab = (lawNum) => {
+            [this.btnLaw1, this.btnLaw2, this.btnLaw3].forEach((btn, idx) => {
+                btn.classList.remove("active");
+                if (idx + 1 === lawNum) btn.classList.add("active");
+            });
+
+            [this.groupLaw1, this.groupLaw2, this.groupLaw3].forEach((group, idx) => {
+                group.style.display = (idx + 1 === lawNum) ? 'block' : 'none';
+            });
+
+            // Adjust ThreeJS visuals dynamically based on active sub-law study module
+            if (lawNum === 1) {
+                this.focusRing.visible = true;
+                this.velArrow.visible = false;
+                this.gravArrow.visible = false;
+                this.wedgesGroup.visible = false;
+            } else if (lawNum === 2) {
+                this.focusRing.visible = false;
+                this.velArrow.visible = true;
+                this.gravArrow.visible = true;
+                this.wedgesGroup.visible = this.showAreas;
+            } else if (lawNum === 3) {
+                this.focusRing.visible = false;
+                this.velArrow.visible = false;
+                this.gravArrow.visible = false;
+                this.wedgesGroup.visible = false;
+            }
+        };
+
+        this.btnLaw1.addEventListener("click", () => selectLawTab(1));
+        this.btnLaw2.addEventListener("click", () => selectLawTab(2));
+        this.btnLaw3.addEventListener("click", () => selectLawTab(3));
+        
+        // Initialize to 1st Law visual states on startup
+        selectLawTab(1);
+
+        // 2. Real Planets Dataset Selector
+        this.selectPlanet.addEventListener("change", (e) => {
+            const planet = e.target.value;
+            if (planet === "custom") return;
+
+            // Planet parameters: [semi-major axis (a), eccentricity (e)]
+            const planetsData = {
+                mercury: { a: 0.387, e: 0.206, scale: 3.5 },
+                venus:   { a: 0.723, e: 0.007, scale: 2.2 },
+                earth:   { a: 1.000, e: 0.017, scale: 1.8 },
+                mars:    { a: 1.524, e: 0.093, scale: 1.3 },
+                jupiter: { a: 5.204, e: 0.048, scale: 0.38 },
+                saturn:  { a: 9.582, e: 0.054, scale: 0.20 }
+            };
+
+            const data = planetsData[planet];
+            if (data) {
+                this.a = data.a;
+                this.ecc = data.e;
+                this.scale = data.scale; // adjust display scale dynamically so big planets fit the canvas!
+
+                // Sync sliders and value monitors
+                this.sliderA.value = this.a;
+                this.valA.textContent = this.a.toFixed(2);
+                
+                this.sliderEcc.value = this.ecc;
+                this.valEcc.textContent = this.ecc.toFixed(2);
+
+                this.updateOrbitGeometry();
+                this.updateThirdLawHUD();
+                this.t = 0;
+                this.clearWedges();
+            }
+        });
+
+        // Sliders Listeners
         this.sliderA.addEventListener("input", (e) => {
             this.a = parseFloat(e.target.value);
             this.valA.textContent = this.a.toFixed(2);
+            this.selectPlanet.value = "custom";
+            this.scale = 2.0; // Reset to default scale
             this.updateOrbitGeometry();
             this.updateThirdLawHUD();
         });
@@ -67,6 +151,7 @@ class KeplerSimulation {
         this.sliderEcc.addEventListener("input", (e) => {
             this.ecc = parseFloat(e.target.value);
             this.valEcc.textContent = this.ecc.toFixed(2);
+            this.selectPlanet.value = "custom";
             this.updateOrbitGeometry();
             this.updateThirdLawHUD();
         });
