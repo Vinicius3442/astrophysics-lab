@@ -4,7 +4,7 @@
 class KeplerSimulation {
     constructor() {
         this.container = document.getElementById("kepler-canvas-container");
-        this.isActive = true;
+        this.isActive = false;
         
         // Physics parameters (Standardized units where G=1, M=1, a=1 => T = 2*pi)
         this.a = 1.0;          // Semi-major axis (AU)
@@ -370,6 +370,7 @@ class KeplerSimulation {
         if (!this.container) return;
         const width = this.container.clientWidth;
         const height = this.container.clientHeight;
+        if (width === 0 || height === 0) return; // Safeguard against 0px dimensions when hidden
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(width, height);
@@ -381,7 +382,9 @@ class KeplerSimulation {
 
     resume() {
         this.isActive = true;
-        this.resize();
+        setTimeout(() => {
+            this.resize();
+        }, 50);
     }
 
     animate() {
