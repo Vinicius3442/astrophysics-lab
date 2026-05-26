@@ -25,7 +25,8 @@
             </div>
             
             <div class="tabs-nav">
-                <button class="tab-btn active" data-tab="kepler">LEIS DE KEPLER</button>
+                <button class="tab-btn active" data-tab="lobby">MENU PRINCIPAL</button>
+                <button class="tab-btn" data-tab="kepler">LEIS DE KEPLER</button>
                 <button class="tab-btn" data-tab="stellar">FÍSICA ESTELAR</button>
                 <button class="tab-btn" data-tab="blackhole">HORIZONTE DE EVENTOS</button>
             </div>
@@ -42,8 +43,69 @@
         <!-- Área Principal de Simulação -->
         <main>
             
+            <!-- 0. LOBBY / MENU INICIAL -->
+            <section id="tab-lobby" class="simulation-view active">
+                <div class="lobby-title-section">
+                    <h2>Centro de Controle de Astrofísica</h2>
+                    <p>Selecione um módulo interativo baseado em fórmulas e equações físicas reais.</p>
+                </div>
+                
+                <div class="lobby-cards-grid">
+                    <!-- CARD 1: KEPLER -->
+                    <div class="lobby-card card-kepler" data-tab="kepler">
+                        <div class="lobby-card-image">
+                            <div class="lobby-card-graphic"></div>
+                        </div>
+                        <div class="lobby-card-info">
+                            <h3>Leis de Kepler e Órbitas</h3>
+                            <p>Simule a gravitação clássica newtoniana em órbitas elípticas. Ajuste semi-eixo e excentricidade, veja a varredura constante de áreas iguais por tempo e comprove a terceira lei harmônica.</p>
+                        </div>
+                        <div class="lobby-card-footer">
+                            <button class="enter-sim-btn">
+                                Acessar Módulo
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- CARD 2: ESTRELA -->
+                    <div class="lobby-card card-stellar" data-tab="stellar">
+                        <div class="lobby-card-image">
+                            <div class="lobby-card-graphic"></div>
+                        </div>
+                        <div class="lobby-card-info">
+                            <h3>Termodinâmica e Ciclos Estelares</h3>
+                            <p>Acesse o interior de uma estrela real. Com o modo corte transversal, inspecione a convecção estelar, as fusões termonucleares de prótons p-p e CNO no núcleo ativo e gere supernovas hiper-realistas.</p>
+                        </div>
+                        <div class="lobby-card-footer">
+                            <button class="enter-sim-btn">
+                                Acessar Módulo
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- CARD 3: BURACO NEGRO -->
+                    <div class="lobby-card card-blackhole" data-tab="blackhole">
+                        <div class="lobby-card-image">
+                            <div class="lobby-card-graphic"></div>
+                        </div>
+                        <div class="lobby-card-info">
+                            <h3>Buraco Negro de Schwarzschild</h3>
+                            <p>Explore as lentes gravitacionais relativísticas ao redor da singularidade de Gargantua. Controle a câmera tridimensional em órbita com mouse e zoom nas geodésicas de Schwarzschild.</p>
+                        </div>
+                        <div class="lobby-card-footer">
+                            <button class="enter-sim-btn">
+                                Acessar Módulo
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
             <!-- 1. SIMULAÇÃO DAS LEIS DE KEPLER -->
-            <section id="tab-kepler" class="simulation-view active">
+            <section id="tab-kepler" class="simulation-view">
                 <div class="canvas-container" id="kepler-canvas-container">
                     <div class="overlay-info">
                         <h3>Órbita Kepleriana</h3>
@@ -190,17 +252,21 @@ a³ = 1.00 | Razão T²/a³ = 1.000</div>
                         <h3>Propriedades Físicas</h3>
                         <div class="control-item">
                             <div class="control-label">
-                                <span>Massa Inicial (M)</span>
-                                <span class="control-value"><span id="val-s-mass">1.0</span> M<sub>&odot;</sub></span>
+                                <span>Massa Inicial (M<sub>&odot;</sub>)</span>
                             </div>
-                            <input type="range" id="slider-s-mass" min="0.1" max="25" step="0.1" value="1.0">
+                            <div class="control-item-row">
+                                <input type="range" id="slider-s-mass" min="0.1" max="25" step="0.1" value="1.0">
+                                <input type="number" id="num-s-mass" class="num-input" min="0.1" max="25" step="0.1" value="1.0">
+                            </div>
                         </div>
                         <div class="control-item">
                             <div class="control-label">
-                                <span>Temperatura Efetiva (T)</span>
-                                <span class="control-value"><span id="val-s-temp">5778</span> K</span>
+                                <span>Temperatura Efetiva (K)</span>
                             </div>
-                            <input type="range" id="slider-s-temp" min="2000" max="40000" step="100" value="5778">
+                            <div class="control-item-row">
+                                <input type="range" id="slider-s-temp" min="2000" max="40000" step="100" value="5778">
+                                <input type="number" id="num-s-temp" class="num-input" min="2000" max="40000" step="100" value="5778">
+                            </div>
                         </div>
                         <div class="control-item">
                             <div class="control-label">
@@ -233,10 +299,27 @@ a³ = 1.00 | Razão T²/a³ = 1.000</div>
                     </div>
 
                     <div class="control-group">
+                        <h3>Estrutura Estelar</h3>
+                        <div class="switch-container">
+                            <div>
+                                <span class="control-label" style="font-size: 0.8rem; color: var(--accent-cyan);">Estrutura Interna 3D</span>
+                                <div class="switch-label-desc">Revela o corte do núcleo e camadas</div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="toggle-s-internal">
+                                <span class="slider-switch"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
                         <h3>Evolução Estelar</h3>
-                        <button class="btn-primary" id="btn-s-evolve">
+                        <button class="btn-primary" id="btn-s-evolve" style="width: 100%;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-                            Desparar Morte Estelar
+                            Disparar Morte Estelar
+                        </button>
+                        <button class="btn-secondary" id="btn-s-reset" style="width: 100%; margin-top: 8px; border-color: var(--accent-cyan); color: #ffffff; display: none;">
+                            Reiniciar Ciclo Estelar
                         </button>
                     </div>
                 </div>
