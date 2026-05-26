@@ -184,6 +184,8 @@ class BlackHoleSimulation {
             u_redshift_enabled: { value: 1.0 },
             u_lensing_enabled: { value: 1.0 },
             u_bg_texture: { value: bgTexture },
+            u_spin: { value: 0.0 },
+            u_bh_type: { value: 0.0 },
             
             // Câmera virtual parameters passed to GPU
             u_cam_pos: { value: new THREE.Vector3() },
@@ -210,6 +212,8 @@ class BlackHoleSimulation {
             uniform float u_redshift_enabled;
             uniform float u_lensing_enabled;
             uniform sampler2D u_bg_texture;
+            uniform float u_spin;
+            uniform float u_bh_type;
             
             // Virtual Camera projection vectors
             uniform vec3 u_cam_pos;
@@ -276,8 +280,14 @@ class BlackHoleSimulation {
                     float r2 = dot(ray_pos, ray_pos);
                     float r = sqrt(r2);
 
-                    // A. Schwarzschild horizon collapse boundary check
-                    if (r < u_rs) {
+                    // A. Kerr/Schwarzschild horizon collapse boundary check
+                    float horizon_r = u_rs;
+                    if (u_bh_type > 0.5) {
+                        float rg = u_rs * 0.5;
+                        float spin_a = u_spin * rg;
+                        horizon_r = rg + sqrt(max(0.001, rg * rg - spin_a * spin_a));
+                    }
+                    if (r < horizon_r) {
                         hit_horizon = true;
                         break;
                     }
@@ -292,7 +302,16 @@ class BlackHoleSimulation {
                         // Deflection acceleration force: a = 1.5 * Rs * L^2 / r^5
                         float deflection = (3.0 * u_rs) / (r2 * r);
                         vec3 angular_momentum = cross(ray_pos, ray_dir);
-                        ray_dir += cross(angular_momentum, ray_pos) * deflection * dt;
+                        vec3 deflection_force = cross(angular_momentum, ray_pos) * deflection * dt;
+                        
+                        // Kerr frame-dragging deflection (Lense-Thirring drag)
+                        vec3 frame_dragging = vec3(0.0);
+                        if (u_bh_type > 0.5) {
+                            vec3 spin_axis = vec3(0.0, 0.0, 1.0);
+                            frame_dragging = cross(spin_axis, ray_pos) * (2.0 * u_spin * u_rs / (r2 * r2)) * dt;
+                        }
+                        
+                        ray_dir += deflection_force + frame_dragging;
                         ray_dir = normalize(ray_dir);
                     }
 
@@ -310,6 +329,10 @@ class BlackHoleSimulation {
 
                         // Accretion disk scale bounds: ISCO (3.0 * Rs) to Outer (10.0 * Rs)
                         float r_isco = 3.0 * u_rs;
+                        if (u_bh_type > 0.5) {
+                            // As spin increases, ISCO shrinks inwards to the Kerr limit
+                            r_isco = u_rs * (3.0 - 2.3 * u_spin);
+                        }
                         float r_outer = 9.5 * u_rs;
 
                         if (dist > r_isco && dist < r_outer) {
@@ -319,8 +342,9 @@ class BlackHoleSimulation {
                             float w = 2.8 / (dist * sqrt(dist));
                             
                             // Keplerian differential shear: inner orbits rotate faster
-                            // w_shear decays as dist^-1.5
-                            float angle_sheared = angle - u_time * (1.6 / pow(dist, 1.5));
+                            // For Kerr, let's include spin frame dragging contribution in shear speed
+                            float spin_contrib = (u_bh_type > 0.5) ? (u_spin * 2.0 / pow(dist, 2.0)) : 0.0;
+                            float angle_sheared = angle - u_time * (1.6 / pow(dist, 1.5) + spin_contrib);
                             
                             // Evaluate FBM noise in shearing coordinates for beautiful spiraling dust filaments
                             float noise_val = fbm(vec3(hit_pos.xy * 6.5, angle_sheared * 4.8));
@@ -585,6 +609,13 @@ class BlackHoleSimulation {
         this.uniforms.u_doppler_enabled.value = this.dopplerEffect ? 1.0 : 0.0;
         this.uniforms.u_redshift_enabled.value = this.redshiftEffect ? 1.0 : 0.0;
         this.uniforms.u_lensing_enabled.value = this.gravLensing ? 1.0 : 0.0;
+
+        // Sync spin and bhType uniforms
+        let typeCode = 0.0; // Schwarzschild
+        if (this.bhType === 'kerr') typeCode = 1.0;
+        else if (this.bhType === 'quasar') typeCode = 2.0;
+        this.uniforms.u_bh_type.value = typeCode;
+        this.uniforms.u_spin.value = this.spin;
 
         // Projection vectors passed to GPU
         this.uniforms.u_cam_pos.value.copy(camPos);
