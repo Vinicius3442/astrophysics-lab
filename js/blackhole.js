@@ -380,27 +380,32 @@ class BlackHoleSimulation {
                             // Keplerian orbital speed (w = sqrt(G*M/r^3))
                             float w = 2.8 / (dist * sqrt(dist));
                             
-                            // Keplerian differential shear: inner orbits rotate faster
-                            // For Kerr, let's include spin frame dragging contribution in shear speed
+                            // Kerr frame dragging shear
                             float spin_contrib = (u_bh_type > 0.5) ? (u_spin * 2.0 / pow(dist, 2.0)) : 0.0;
                             float angle_sheared = angle - u_time * (1.6 / pow(dist, 1.5) + spin_contrib);
                             
-                            // Evaluate FBM noise in shearing coordinates for beautiful spiraling dust filaments
-                            float noise_val = fbm(vec3(hit_pos.xy * 6.5, angle_sheared * 4.8));
+                            // Ultra-realistic Interstellar FBM Noise (multi-octave)
+                            vec2 p = vec2(hit_pos.xy * 8.0);
+                            float noise_val = fbm(vec3(p, angle_sheared * 5.5));
+                            noise_val += 0.5 * fbm(vec3(p * 2.0, angle_sheared * 12.0 - u_time));
+                            noise_val += 0.25 * fbm(vec3(p * 4.0, angle_sheared * 24.0));
                             
-                            // Thermal profile density curve (sharp inner cut at ISCO, smooth outer decay)
-                            float density = smoothstep(r_isco, r_isco + 0.18, dist) * (1.0 - smoothstep(r_isco + 0.18, r_outer, dist));
-                            density = pow(density, 1.25);
-
-                            // Fade brightness near horizon boundary to show Schwarzschild silhouette clearly
-                            density *= smoothstep(r_isco * 0.95, r_isco * 1.05, dist);
-
-                            float brightness = (0.2 + 0.8 * noise_val) * density * u_accretion_rate;
+                            // Thermal profile density curve
+                            float density = smoothstep(r_isco, r_isco + 0.25, dist) * (1.0 - smoothstep(r_outer * 0.7, r_outer, dist));
+                            density = pow(density, 1.5); // sharpen edge
                             
-                            // Base color mapping (extremely hot near inner edge)
-                            vec3 disk_base_color = vec3(1.0, 0.45, 0.08); // Deep hot orange
-                            if (dist < r_isco * 1.6) {
-                                disk_base_color = mix(vec3(1.0, 0.45, 0.08), vec3(1.0, 0.94, 0.82), (r_isco * 1.6 - dist) / (r_isco * 0.6));
+                            // Pseudo-volumetric opacity based on grazing angle
+                            // Rays hitting the disk horizontally (ray_dir.z ~ 0) pass through more gas
+                            float incidence_angle = abs(ray_dir.z);
+                            float volumetric_opacity = clamp(density / (incidence_angle + 0.05), 0.0, 1.0);
+
+                            float brightness = (0.3 + 0.7 * noise_val) * density * u_accretion_rate * 2.5;
+                            
+                            // High-end blackbody radiation gradient
+                            vec3 disk_base_color = vec3(0.9, 0.25, 0.05); // Deep red outer edge
+                            if (dist < r_isco * 2.0) {
+                                // Hot orange to blinding white at inner ISCO
+                                disk_base_color = mix(vec3(1.0, 0.5, 0.1), vec3(1.0, 0.95, 0.9), (r_isco * 2.0 - dist) / (r_isco * 1.0));
                             }
 
                             // Relativistic Doppler Beaming
@@ -423,13 +428,15 @@ class BlackHoleSimulation {
                             float redshift_factor = 1.0;
                             if (u_redshift_enabled > 0.5) {
                                 redshift_factor = sqrt(1.0 - u_rs / dist);
-                                disk_base_color = mix(vec3(0.35, 0.005, 0.0), disk_base_color, redshift_factor); // deep gravitational redshift
+                                disk_base_color = mix(vec3(0.35, 0.005, 0.0), disk_base_color, redshift_factor); 
                             }
-
-                            // Accumulate volumetric alpha blending
-                            float opacity = brightness * 0.65 * (1.0 - accumulated_disk_alpha);
-                            color += disk_base_color * brightness * doppler_factor * redshift_factor * opacity * 2.5;
-                            accumulated_disk_alpha += opacity;
+                            
+                            vec3 final_disk_color = disk_base_color * brightness * doppler_factor * redshift_factor;
+                            float alpha = volumetric_opacity * clamp(brightness, 0.0, 1.0);
+                            
+                            // Accumulate color multiplicatively
+                            color += final_disk_color * alpha * (1.0 - accumulated_disk_alpha);
+                            accumulated_disk_alpha += alpha * (1.0 - accumulated_disk_alpha);
 
                             if (accumulated_disk_alpha >= 0.98) {
                                 break;
@@ -472,8 +479,9 @@ class BlackHoleSimulation {
     }
 
     syncVirtualCameraToSliders() {
-        // Position camera spherically based on pitch and distance
-        const r = 4.5;
+        // Dynamic camera distance: slightly zoom in/out based on mass to give a subtle sense of scale
+        const scaleFactor = 1.0 - Math.log10(Math.max(1.0, this.mass)) * 0.03;
+        const r = 4.5 * scaleFactor;
         const pitchRad = (this.pitchAngle / 180) * Math.PI;
         
         // Position on circle in Y-Z plane
@@ -641,10 +649,8 @@ class BlackHoleSimulation {
         this.uniforms.u_time.value += 0.015;
         
         // Scale-invariant shader size to prevent clipping for huge masses (TON 618)
-        // A slight logarithmic scale makes the user feel the size increase visually without breaking bounds
-        const scaleFactor = 1.0 + Math.log10(Math.max(1, this.mass)) * 0.025;
-        const rsShaderScale = 0.18 * scaleFactor;
-        this.uniforms.u_rs.value = rsShaderScale;
+        // The shader mathematical size remains completely constant to preserve Kerr geodesics geometry perfectly
+        this.uniforms.u_rs.value = 0.18;
 
         this.uniforms.u_accretion_rate.value = this.accretionRate;
         this.uniforms.u_doppler_enabled.value = this.dopplerEffect ? 1.0 : 0.0;

@@ -62,8 +62,11 @@ class StellarSimulation {
         this.btnEvolve = document.getElementById("btn-s-evolve");
         this.btnReset = document.getElementById("btn-s-reset");
         this.toggleInternal = document.getElementById("toggle-s-internal");
-        this.selectExotic = document.getElementById("select-s-exotic");
-        
+        this.inputSearch = document.getElementById("input-s-search");
+        this.searchSuggestions = document.getElementById("search-suggestions");
+        this.btnCustomStar = document.getElementById("btn-custom-star");
+        this.starsDatabase = [];
+        this.fetchStarsDatabase();
         // Alert Modal Elements
         this.alertModal = document.getElementById("stellar-alert");
         this.alertTitle = document.getElementById("alert-title");
@@ -146,12 +149,16 @@ class StellarSimulation {
             this.showInternal = e.target.checked;
             this.internalLayersGroup.visible = this.showInternal;
             if (this.showInternal) {
-                // Shell becomes transparent ghost shell
-                this.starMat.transparent = true;
-                this.starMat.opacity = 0.18;
-                this.coronaMat.transparent = true;
-                this.coronaMat.opacity = 0.15;
+                // Apply clipping plane to create a clean visual cross-section 
+                this.starMat.clippingPlanes = [this.clipPlane];
+                this.coronaMat.clippingPlanes = [this.clipPlane];
+                this.starMat.side = THREE.DoubleSide; // Show inner hollow
+                this.starMat.transparent = false; // keep solid
             } else {
+                // Remove clipping
+                this.starMat.clippingPlanes = [];
+                this.coronaMat.clippingPlanes = [];
+                this.starMat.side = THREE.FrontSide;
                 this.starMat.transparent = false;
                 this.starMat.opacity = 1.0;
                 this.coronaMat.transparent = true;
@@ -177,72 +184,119 @@ class StellarSimulation {
         // 2. Real & Exotic Stars Select Event Listener (Simulated API Fetch)
         this.selectExotic.addEventListener("change", (e) => {
             const val = e.target.value;
-            this.selectedExotic = val;
-            if (val === 'custom') {
-                this.sliderMass.disabled = false;
-                this.sliderTemp.disabled = false;
-                this.numMass.disabled = false;
-                this.numTemp.disabled = false;
-                this.btnEvolve.style.display = 'block';
-                
-                this.mass = parseFloat(this.sliderMass.value);
-                this.temp = parseFloat(this.sliderTemp.value);
-                this.updateStellarPhysics();
-                this.createMagneticLoops();
-                this.updateExoticVisuals(val);
+        // Custom Star Button
+        this.btnCustomStar.addEventListener("click", () => {
+            this.selectedExotic = 'custom';
+            this.sliderMass.disabled = false;
+            this.sliderTemp.disabled = false;
+            this.numMass.disabled = false;
+            this.numTemp.disabled = false;
+            this.btnEvolve.style.display = 'block';
+            this.inputSearch.value = "";
+            this.searchSuggestions.style.display = 'none';
+            
+            this.mass = parseFloat(this.sliderMass.value);
+            this.temp = parseFloat(this.sliderTemp.value);
+            this.updateStellarPhysics();
+            this.createMagneticLoops();
+            this.updateExoticVisuals('custom');
+        });
+
+        // Search Input Listeners
+        this.inputSearch.addEventListener("input", (e) => {
+            const query = e.target.value.toLowerCase().trim();
+            if (query.length < 1) {
+                this.searchSuggestions.style.display = 'none';
                 return;
             }
-
-            const catalog = {
-                sun: { mass: 1.0, temp: 5778, label: "Sol", type: "Anã Amarela (G2V)" },
-                sirius: { mass: 2.02, temp: 9940, label: "Sirius A", type: "Estrela Branca (A1V)" },
-                proxima: { mass: 0.12, temp: 3040, label: "Próxima Centauri", type: "Anã Vermelha (M5.5V)" },
-                stephenson: { mass: 25.0, temp: 3200, label: "Stephenson 2-18", type: "Hipergigante Vermelha (M6)" },
-                etacarinae: { mass: 25.0, temp: 36000, label: "Eta Carinae", type: "Variável Luminosa Azul (LBV)" },
-                wolf_rayet: { mass: 20.0, temp: 45000, label: "Wolf-Rayet", type: "Estrela Wolf-Rayet (WR)" },
-                tzo: { mass: 15.0, temp: 3000, label: "Objeto Thorne-Żytkow", type: "Objeto Thorne-Żytkow (TZO)" }
-            };
-
-            const star = catalog[val];
-            if (star) {
-                this.metricClass.textContent = "Buscando dados da API...";
-                this.metricClass.style.color = "var(--accent-yellow)";
-                
-                setTimeout(() => {
-                    if (this.selectedExotic !== val) return;
+            
+            const results = this.starsDatabase.filter(star => 
+                star.name.toLowerCase().includes(query) || 
+                star.tags.some(tag => tag.toLowerCase().includes(query))
+            );
+            
+            this.searchSuggestions.innerHTML = '';
+            if (results.length > 0) {
+                this.searchSuggestions.style.display = 'block';
+                results.forEach(star => {
+                    const div = document.createElement("div");
+                    div.style.padding = "8px 12px";
+                    div.style.cursor = "pointer";
+                    div.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
+                    div.style.fontSize = "0.8rem";
+                    div.innerHTML = `<strong style="color:var(--accent-cyan);">${star.name}</strong><br><span style="color:var(--text-secondary); font-size:0.7rem;">${star.type}</span>`;
                     
-                    this.mass = star.mass;
-                    this.temp = star.temp;
+                    // Hover effect
+                    div.addEventListener("mouseenter", () => div.style.background = "rgba(0, 245, 212, 0.15)");
+                    div.addEventListener("mouseleave", () => div.style.background = "transparent");
                     
-                    this.sliderMass.value = this.mass;
-                    this.numMass.value = this.mass;
-                    this.sliderTemp.value = this.temp;
-                    this.numTemp.value = this.temp;
-
-                    this.sliderMass.disabled = true;
-                    this.sliderTemp.disabled = true;
-                    this.numMass.disabled = true;
-                    this.numTemp.disabled = true;
-
-                    if (val === 'stephenson') {
-                        this.lum = 440000;
-                        this.radius = 2150;
-                    } else if (val === 'etacarinae') {
-                        this.lum = 5000000;
-                        this.radius = 240;
-                    } else {
-                        this.lum = Math.pow(this.mass, 3.5);
-                    }
-
-                    this.updateStellarPhysics();
-                    this.createMagneticLoops();
-                    this.updateExoticVisuals(val);
-                    
-                    this.metricClass.textContent = star.type;
-                    this.metricClass.style.color = "var(--accent-cyan)";
-                }, 400);
+                    div.addEventListener("click", () => {
+                        this.selectStarFromDB(star);
+                        this.searchSuggestions.style.display = 'none';
+                    });
+                    this.searchSuggestions.appendChild(div);
+                });
+            } else {
+                this.searchSuggestions.style.display = 'block';
+                this.searchSuggestions.innerHTML = '<div style="padding:8px 12px; font-size:0.8rem; color:var(--text-secondary);">Nenhuma estrela encontrada.</div>';
             }
         });
+        
+        // Hide suggestions when clicking outside
+        document.addEventListener("click", (e) => {
+            if (e.target !== this.inputSearch && e.target !== this.searchSuggestions) {
+                this.searchSuggestions.style.display = 'none';
+            }
+        });
+    }
+
+    async fetchStarsDatabase() {
+        try {
+            const response = await fetch('data/stars.json');
+            this.starsDatabase = await response.json();
+        } catch (error) {
+            console.error("Erro ao carregar o banco de dados estelar:", error);
+        }
+    }
+
+    selectStarFromDB(star) {
+        this.inputSearch.value = star.name;
+        this.selectedExotic = star.id;
+        
+        this.metricClass.textContent = "Carregando dados astronômicos...";
+        this.metricClass.style.color = "var(--accent-yellow)";
+        
+        setTimeout(() => {
+            this.mass = star.mass;
+            this.temp = star.temp;
+            
+            this.sliderMass.value = this.mass;
+            this.numMass.value = this.mass;
+            this.sliderTemp.value = this.temp;
+            this.numTemp.value = this.temp;
+
+            this.sliderMass.disabled = true;
+            this.sliderTemp.disabled = true;
+            this.numMass.disabled = true;
+            this.numTemp.disabled = true;
+
+            // Update radius/lum for massive giants to override standard formula
+            if (star.radius > 0) {
+                this.radius = star.radius;
+                // Luminosity approx from radius and temp
+                const tempRatio = this.temp / 5778;
+                this.lum = (this.radius * this.radius) * Math.pow(tempRatio, 4);
+            } else {
+                this.lum = Math.pow(this.mass, 3.5);
+            }
+
+            this.updateStellarPhysics();
+            this.createMagneticLoops();
+            this.updateExoticVisuals(star.id);
+            
+            this.metricClass.textContent = star.type;
+            this.metricClass.style.color = "var(--accent-cyan)";
+        }, 400);
     }
 
     initThree() {
@@ -257,7 +311,10 @@ class StellarSimulation {
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         this.renderer.setSize(width, height);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer.localClippingEnabled = true;
         this.container.appendChild(this.renderer.domElement);
+
+        this.clipPlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
 
         this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
@@ -1410,12 +1467,21 @@ class StellarSimulation {
             this.state = 'explosion';
             const progress = (this.deathTimer - 1.5) / 2.0;
 
-            // Gigantic scale flash sphere
+            // Blind Flash: Overexposure effect using massive white/blue geometry
+            if (progress < 0.2) {
+                this.coronaMesh.scale.setScalar(this.radius * (1.0 + progress * 80.0));
+                this.coronaMat.color.setHex(0xffffff);
+                this.coronaMat.opacity = 1.0;
+                this.starLight.intensity = 200.0; // Overwhelming light
+            } else {
+                // Flash fades and expanding shockwave takes over
+                this.coronaMesh.scale.setScalar(this.radius * (10.0 + progress * 20.0));
+                this.coronaMat.color.setHex(0x00aaff); // shifts to blue/cyan energy
+                this.coronaMat.opacity = (1.0 - progress) * 0.8;
+                this.starLight.intensity = 50.0 * (1.0 - progress);
+            }
             this.starMesh.visible = false;
             this.coronaMesh.visible = true;
-            this.coronaMesh.scale.setScalar(0.1 + progress * 15.0);
-            this.coronaMat.color.setHex(0xffffff);
-            this.coronaMat.opacity = (1.0 - progress) * 0.9;
             this.coronaMat.blending = THREE.AdditiveBlending;
 
             // Activate and expand particles massively at high speeds

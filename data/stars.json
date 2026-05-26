@@ -1,0 +1,13 @@
+[
+    { "id": "sun", "name": "Sol", "mass": 1.0, "temp": 5778, "radius": 1.0, "type": "Anã Amarela (G2V)", "tags": ["sol", "padrao", "anã amarela", "terra"] },
+    { "id": "sirius", "name": "Sirius A", "mass": 2.06, "temp": 9940, "radius": 1.71, "type": "Estrela da Sequência Principal (A1V)", "tags": ["sirius", "brilhante", "proxima", "A1V"] },
+    { "id": "eta_carinae", "name": "Eta Carinae", "mass": 100.0, "temp": 35000, "radius": 240.0, "type": "Variável Luminosa Azul (LBV)", "tags": ["eta carinae", "maciça", "explosiva", "instavel", "LBV"] },
+    { "id": "stephenson", "name": "Stephenson 2-18", "mass": 18.0, "temp": 3200, "radius": 2150.0, "type": "Hipergigante Vermelha (M6)", "tags": ["stephenson", "gigante", "maior", "vermelha", "hipergigante"] },
+    { "id": "uy_scuti", "name": "UY Scuti", "mass": 10.0, "temp": 3365, "radius": 1708.0, "type": "Supergigante Vermelha (M4I)", "tags": ["uy scuti", "supergigante", "vermelha"] },
+    { "id": "betelgeuse", "name": "Betelgeuse", "mass": 16.5, "temp": 3600, "radius": 764.0, "type": "Supergigante Vermelha (M1-M2Ia)", "tags": ["betelgeuse", "supergigante", "vermelha", "orion", "supernova"] },
+    { "id": "rigel", "name": "Rigel", "mass": 21.0, "temp": 12100, "radius": 78.9, "type": "Supergigante Azul (B8Ia)", "tags": ["rigel", "supergigante", "azul", "orion"] },
+    { "id": "r136a1", "name": "R136a1", "mass": 260.0, "temp": 50000, "radius": 35.0, "type": "Estrela Wolf-Rayet (WN5h)", "tags": ["r136a1", "maciça", "pesada", "wolf rayet", "tarantula"] },
+    { "id": "ton_618", "name": "TON 618 (Buraco Negro)", "mass": 66000000000.0, "temp": 0, "radius": 0, "type": "Buraco Negro Ultramassivo", "tags": ["ton 618", "buraco negro", "quasar", "monstro"] },
+    { "id": "wolf_rayet", "name": "Estrela Wolf-Rayet Genérica", "mass": 20.0, "temp": 45000, "radius": 1.5, "type": "Exótica (WR)", "tags": ["wolf rayet", "exotica", "nucleo", "quente"] },
+    { "id": "tzo", "name": "Objeto Thorne-Żytkow (TZO)", "mass": 15.0, "temp": 3000, "radius": 400.0, "type": "Exótica Híbrida (Supergigante + Nêutrons)", "tags": ["tzo", "thorne", "zytkow", "exotica", "hibrida", "neutrons"] }
+]
