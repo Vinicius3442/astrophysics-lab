@@ -42,6 +42,16 @@ class BlackHoleSimulation {
         this.metricRph = document.getElementById("metric-b-rph");
         this.metricIsco = document.getElementById("metric-b-isco");
 
+        // Advanced Singularity Selectors & Spin sliders
+        this.selectType = document.getElementById("select-b-type");
+        this.sliderSpin = document.getElementById("slider-b-spin");
+        this.valSpin = document.getElementById("val-b-spin");
+        this.groupSpin = document.getElementById("group-b-spin");
+
+        // State trackers
+        this.bhType = 'schwar';
+        this.spin = 0.0;
+
         // Event Listeners
         this.sliderMass.addEventListener("input", (e) => {
             this.mass = parseFloat(e.target.value);
@@ -72,17 +82,62 @@ class BlackHoleSimulation {
         this.toggleLensing.addEventListener("change", (e) => {
             this.gravLensing = e.target.checked;
         });
+
+        this.selectType.addEventListener("change", (e) => {
+            const val = e.target.value;
+            this.bhType = val;
+            
+            if (val === 'kerr' || val === 'quasar') {
+                this.groupSpin.style.display = 'block';
+                if (this.spin === 0.0) {
+                    this.spin = 0.85;
+                    this.sliderSpin.value = 0.85;
+                    this.valSpin.textContent = "0.85";
+                }
+            } else {
+                this.groupSpin.style.display = 'none';
+                this.spin = 0.0;
+            }
+            this.updateHUD();
+        });
+
+        this.sliderSpin.addEventListener("input", (e) => {
+            this.spin = parseFloat(e.target.value);
+            this.valSpin.textContent = this.spin.toFixed(2);
+            this.updateHUD();
+        });
     }
 
     updateHUD() {
-        // RS = 2GM/c^2. Solar mass RS is ~2.95 km
-        const rs_km = this.mass * 2.953;
-        const rph_km = rs_km * 1.5;   // Photon sphere = 1.5 RS
-        const isco_km = rs_km * 3.0;  // ISCO stable orbit = 3.0 RS
+        // RS = 2GM/c^2. Solar mass RS is ~2.953 km
+        const rg_km = this.mass * 1.476; // Gravitational radius GM/c^2
+        const rs_km = rg_km * 2.0;       // Schwarzschild Event Horizon
+        
+        let rh_km = rs_km;            // Kerr Event Horizon r+ = rg + sqrt(rg^2 - a^2)
+        if (this.bhType === 'kerr' || this.bhType === 'quasar') {
+            // spin (a) is normalized as a fraction of rg (0.0 to 0.99)
+            const spin_a = this.spin * rg_km;
+            rh_km = rg_km + Math.sqrt(Math.max(0.001, rg_km * rg_km - spin_a * spin_a));
+        }
 
-        this.metricRs.textContent = rs_km.toFixed(1) + " km";
+        const rph_km = rg_km * (this.spin > 0 ? 2.0 : 3.0); // photon sphere approx
+        const isco_km = rg_km * (this.spin > 0 ? 3.0 : 6.0); // stable orbit approx
+
+        this.metricRs.textContent = rh_km.toFixed(1) + " km";
         this.metricRph.textContent = rph_km.toFixed(1) + " km";
         this.metricIsco.textContent = isco_km.toFixed(1) + " km";
+
+        // Update overlay title
+        const overlayTitle = document.querySelector("#tab-blackhole .overlay-info h3");
+        if (overlayTitle) {
+            if (this.bhType === 'schwar') {
+                overlayTitle.textContent = "Singularidade de Schwarzschild";
+            } else if (this.bhType === 'kerr') {
+                overlayTitle.textContent = "Singularidade de Kerr";
+            } else if (this.bhType === 'quasar') {
+                overlayTitle.textContent = "Quasar Relativístico";
+            }
+        }
     }
 
     initThree() {
@@ -378,68 +433,89 @@ class BlackHoleSimulation {
         this.sliderPitch.value = Math.round(this.pitchAngle);
     }
 
-    // High resolution stars and nebula dust canvas texture generator
+    // Telescope-grade spherical 2:1 high resolution seamless starfield
     generateCosmicTexture() {
-        const size = 1024;
+        const width = 2048;
+        const height = 1024;
         const canvas = document.createElement("canvas");
-        canvas.width = size;
-        canvas.height = size;
+        canvas.width = width;
+        canvas.height = height;
         const ctx = canvas.getContext("2d");
 
         // Pitch black cosmos background
-        ctx.fillStyle = "#010103";
-        ctx.fillRect(0, 0, size, size);
+        ctx.fillStyle = "#010104";
+        ctx.fillRect(0, 0, width, height);
 
-        // Overlapping rich space nebulas
-        // 1. Central violet-purple core
-        const grad1 = ctx.createRadialGradient(size/2, size/2, 50, size/2, size/2, size * 0.5);
-        grad1.addColorStop(0, "rgba(120, 40, 180, 0.22)");
-        grad1.addColorStop(0.4, "rgba(50, 25, 120, 0.12)");
+        // Seamless cosmic clouds nebulae
+        // 1. Central violet-purple nebulae lane
+        const grad1 = ctx.createRadialGradient(width/2, height/2, 50, width/2, height/2, width * 0.45);
+        grad1.addColorStop(0, "rgba(135, 30, 200, 0.24)");
+        grad1.addColorStop(0.35, "rgba(55, 18, 110, 0.11)");
         grad1.addColorStop(1, "rgba(0,0,0,0)");
         ctx.fillStyle = grad1;
-        ctx.fillRect(0, 0, size, size);
+        ctx.fillRect(0, 0, width, height);
 
-        // 2. Secondary offset deep teal nebula lane
-        const grad2 = ctx.createRadialGradient(size * 0.3, size * 0.4, 20, size * 0.3, size * 0.4, size * 0.4);
-        grad2.addColorStop(0, "rgba(0, 180, 210, 0.14)");
-        grad2.addColorStop(0.5, "rgba(0, 80, 150, 0.06)");
+        // 2. Off-center glowing teal cosmic lane
+        const grad2 = ctx.createRadialGradient(width * 0.28, height * 0.42, 30, width * 0.28, height * 0.42, width * 0.38);
+        grad2.addColorStop(0, "rgba(0, 185, 215, 0.16)");
+        grad2.addColorStop(0.48, "rgba(0, 72, 140, 0.05)");
         grad2.addColorStop(1, "rgba(0,0,0,0)");
         ctx.fillStyle = grad2;
-        ctx.fillRect(0, 0, size, size);
+        ctx.fillRect(0, 0, width, height);
 
-        // 3. Diagonal cosmic dust lane (magenta-orange clouds)
-        const grad3 = ctx.createLinearGradient(0, 0, size, size);
-        grad3.addColorStop(0.1, "rgba(0,0,0,0)");
-        grad3.addColorStop(0.45, "rgba(220, 60, 110, 0.07)");
-        grad3.addColorStop(0.55, "rgba(240, 120, 30, 0.05)");
-        grad3.addColorStop(0.9, "rgba(0,0,0,0)");
+        // 3. Winding magenta-orange dust clouds
+        const grad3 = ctx.createLinearGradient(0, 0, width, height);
+        grad3.addColorStop(0.12, "rgba(0,0,0,0)");
+        grad3.addColorStop(0.48, "rgba(225, 52, 105, 0.07)");
+        grad3.addColorStop(0.55, "rgba(245, 115, 28, 0.04)");
+        grad3.addColorStop(0.88, "rgba(0,0,0,0)");
         ctx.fillStyle = grad3;
-        ctx.fillRect(0, 0, size, size);
+        ctx.fillRect(0, 0, width, height);
 
-        // Add 3800 pinpoint stars (highly dense deep space)
-        for (let i = 0; i < 3800; i++) {
-            const x = Math.random() * size;
-            const y = Math.random() * size;
-            // Diverse radii (mostly sub-pixel pinpoint stars, a few larger bright stars)
-            const rand = Math.random();
-            const r = rand < 0.85 ? 0.3 + Math.random() * 0.6 : 0.9 + Math.random() * 0.9;
+        // Add 4200 multi-scale stars (telescope lens halos)
+        for (let i = 0; i < 4200; i++) {
+            const x = Math.random() * width;
+            const y = Math.random() * height;
             
-            // Rich color spectrum distribution
-            const cType = Math.random();
-            const alpha = 0.3 + Math.random() * 0.7;
-            if (cType < 0.25) {
-                ctx.fillStyle = `rgba(165, 220, 255, ${alpha})`; // hot blue-white
-            } else if (cType < 0.45) {
-                ctx.fillStyle = `rgba(255, 200, 150, ${alpha})`; // warm solar orange
-            } else if (cType < 0.55) {
-                ctx.fillStyle = `rgba(255, 240, 190, ${alpha})`; // warm yellow-white
+            const rand = Math.random();
+            // 85% are pinpoint stars, 15% are bright stars with halo glows
+            if (rand < 0.85) {
+                const r = 0.25 + Math.random() * 0.65;
+                const alpha = 0.3 + Math.random() * 0.7;
+                
+                // Color hued spectrum
+                const cType = Math.random();
+                if (cType < 0.28) {
+                    ctx.fillStyle = `rgba(168, 222, 255, ${alpha})`; // hot blue-white
+                } else if (cType < 0.46) {
+                    ctx.fillStyle = `rgba(255, 202, 148, ${alpha})`; // warm orange
+                } else {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`; // pure white
+                }
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fill();
             } else {
-                ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`; // pure white
+                // Bright star with soft telescope halo glow (radial gradient)
+                const r = 0.9 + Math.random() * 1.5;
+                const alpha = 0.65 + Math.random() * 0.35;
+                
+                const starGrad = ctx.createRadialGradient(x, y, 0.1, x, y, r * 4.2);
+                
+                const cType = Math.random();
+                let col = "255, 255, 255";
+                if (cType < 0.28) col = "168, 222, 255";
+                else if (cType < 0.46) col = "255, 202, 148";
+                
+                starGrad.addColorStop(0, `rgba(${col}, ${alpha})`);
+                starGrad.addColorStop(0.2, `rgba(${col}, ${alpha * 0.4})`);
+                starGrad.addColorStop(1, "rgba(0,0,0,0)");
+                
+                ctx.fillStyle = starGrad;
+                ctx.beginPath();
+                ctx.arc(x, y, r * 4.2, 0, Math.PI * 2);
+                ctx.fill();
             }
-
-            ctx.beginPath();
-            ctx.arc(x, y, r, 0, Math.PI * 2);
-            ctx.fill();
         }
 
         const texture = new THREE.CanvasTexture(canvas);
