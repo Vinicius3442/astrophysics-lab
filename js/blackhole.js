@@ -62,6 +62,8 @@ class BlackHoleSimulation {
                                 this.mass.toFixed(1) + " ";
             this.valMass.textContent = formattedMass;
             this.updateHUD();
+            // Reposition camera so horizon stays properly framed
+            this.syncVirtualCameraToSliders();
         });
 
         this.sliderBright.addEventListener("input", (e) => {
@@ -183,26 +185,22 @@ class BlackHoleSimulation {
         this.controls.maxDistance = 8.5; // Zoom out limit
         this.controls.enablePan = false; // Keep centering Gargantua
 
-        // Generate high resolution starry background
-        const bgTexture = this.generateCosmicTexture();
-
         // Shader parameters Uniforms
         this.uniforms = {
             u_resolution: { value: new THREE.Vector2(width, height) },
             u_time: { value: 0.0 },
-            u_rs: { value: 0.20 }, // Schwarzschild Radius
+            u_rs: { value: 0.18 },
             u_accretion_rate: { value: 1.2 },
             u_doppler_enabled: { value: 1.0 },
             u_redshift_enabled: { value: 1.0 },
             u_lensing_enabled: { value: 1.0 },
-            u_bg_texture: { value: bgTexture },
             u_spin: { value: 0.0 },
             u_bh_type: { value: 0.0 },
             
-            // Câmera virtual parameters passed to GPU
-            u_cam_pos: { value: new THREE.Vector3() },
-            u_cam_dir: { value: new THREE.Vector3() },
-            u_cam_up: { value: new THREE.Vector3() },
+            // Camera projection vectors passed to GPU
+            u_cam_pos:   { value: new THREE.Vector3() },
+            u_cam_dir:   { value: new THREE.Vector3() },
+            u_cam_up:    { value: new THREE.Vector3() },
             u_cam_right: { value: new THREE.Vector3() },
             u_fov_scale: { value: 1.0 }
         };
@@ -216,78 +214,291 @@ class BlackHoleSimulation {
         `;
 
         const fragmentShader = `
-            uniform vec2 u_resolution;
+            precision highp float;
+
+            uniform vec2  u_resolution;
             uniform float u_time;
             uniform float u_rs;
             uniform float u_accretion_rate;
             uniform float u_doppler_enabled;
             uniform float u_redshift_enabled;
             uniform float u_lensing_enabled;
-            uniform sampler2D u_bg_texture;
             uniform float u_spin;
             uniform float u_bh_type;
-            
-            // Virtual Camera projection vectors
-            uniform vec3 u_cam_pos;
-            uniform vec3 u_cam_dir;
-            uniform vec3 u_cam_up;
-            uniform vec3 u_cam_right;
-            uniform float u_fov_scale;
-            
-            varying vec2 vUv;
 
-            // 3D Procedural Noise for dynamic dust and gas accretion accretion
-            float hash(vec3 p) {
+            uniform vec3  u_cam_pos;
+            uniform vec3  u_cam_dir;
+            uniform vec3  u_cam_up;
+            uniform vec3  u_cam_right;
+            uniform float u_fov_scale;
+
+            // ──────────────────────────────────────────────────────────────
+            //  HASH / NOISE
+            // ──────────────────────────────────────────────────────────────
+            float hash2(vec2 p){
+                p = fract(p * vec2(127.1, 311.7));
+                return fract(sin(dot(p, vec2(1.0, 113.0))) * 43758.5453);
+            }
+
+            float hash3(vec3 p){
                 p = fract(p * 0.3183099 + vec3(0.1));
                 p *= 17.0;
                 return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
             }
 
-            float noise(vec3 x) {
+            float noise3(vec3 x){
                 vec3 i = floor(x);
                 vec3 f = fract(x);
                 f = f * f * (3.0 - 2.0 * f);
                 return mix(
-                    mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
-                        mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
-                    mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
-                        mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z
-                );
+                    mix(mix(hash3(i+vec3(0,0,0)),hash3(i+vec3(1,0,0)),f.x),
+                        mix(hash3(i+vec3(0,1,0)),hash3(i+vec3(1,1,0)),f.x),f.y),
+                    mix(mix(hash3(i+vec3(0,0,1)),hash3(i+vec3(1,0,1)),f.x),
+                        mix(hash3(i+vec3(0,1,1)),hash3(i+vec3(1,1,1)),f.x),f.y),f.z);
             }
 
-            // Fractal Brownian Motion (FBM) with 4 octaves for fine organic dust lanes
-            float fbm(vec3 p) {
-                float v = 0.0;
-                float a = 0.5;
-                vec3 shift = vec3(100.0);
-                for (int i = 0; i < 4; ++i) {
-                    v += a * noise(p);
-                    p = p * 2.2 + shift;
-                    a *= 0.5;
-                }
+            float fbm(vec3 p){
+                float v=0.0, a=0.5;
+                vec3 shift=vec3(100.0);
+                for(int i=0;i<4;++i){ v+=a*noise3(p); p=p*2.2+shift; a*=0.5; }
                 return v;
             }
 
+            // ──────────────────────────────────────────────────────────────
+            //  PROCEDURAL STARFIELD  (cube-face projection — no singularities)
+            //  Works correctly even when ray_dir has been bent to any angle.
+            // ──────────────────────────────────────────────────────────────
+            vec3 cosmicBackground(vec3 ray) {
+                ray = normalize(ray);
+                vec3 d = abs(ray);
+                vec2 uv;
+                float face;
+
+                // Pick the dominant face – avoids poles/seams entirely
+                if (d.x >= d.y && d.x >= d.z) {
+                    uv   = ray.yz / d.x;
+                    face = ray.x > 0.0 ? 0.0 : 1.0;
+                } else if (d.y >= d.z) {
+                    uv   = ray.xz / d.y;
+                    face = ray.y > 0.0 ? 2.0 : 3.0;
+                } else {
+                    uv   = ray.xy / d.z;
+                    face = ray.z > 0.0 ? 4.0 : 5.0;
+                }
+                uv = uv * 0.5 + 0.5;
+
+                vec3 col = vec3(0.0);
+
+                // Layer 1-3: dense pinpoint stars at different grid scales
+                for (int i = 0; i < 3; i++) {
+                    float sc   = 20.0 + float(i) * 18.0;
+                    vec2  cell = floor(uv * sc + face * 37.3 + float(i) * 11.1);
+                    vec2  f    = fract(uv * sc);
+
+                    vec2 jitter = vec2(
+                        hash2(cell + vec2(0.0, face + float(i) * 7.0)),
+                        hash2(cell + vec2(1.0, face + float(i) * 7.0))
+                    );
+                    float dStar = length(f - jitter);
+
+                    float bright = hash2(cell + vec2(2.0 + face, float(i) * 11.0));
+                    bright = pow(bright, 14.0);          // very sparse
+                    bright *= exp(-dStar * dStar * 600.0);  // tight PSF
+
+                    float hue = hash2(cell + vec2(3.7, float(i) * 9.0));
+                    vec3 tint = mix(vec3(0.75, 0.87, 1.0), vec3(1.0, 0.90, 0.65), hue);
+                    col += bright * tint * 3.0;
+                }
+
+                // Layer 4: rare bright stars with diffraction cross
+                {
+                    float sc   = 70.0;
+                    vec2  cell = floor(uv * sc + face * 53.1);
+                    vec2  f    = fract(uv * sc) - 0.5;
+                    float prob = hash2(cell + vec2(99.0, face));
+                    if (prob > 0.975) {
+                        float sz   = (prob - 0.975) / 0.025;
+                        float core = exp(-dot(f,f) * 250.0);
+                        float spikeH = exp(-f.x*f.x*400.0) * exp(-f.y*f.y*18.0);
+                        float spikeV = exp(-f.y*f.y*400.0) * exp(-f.x*f.x*18.0);
+                        float hue  = hash2(cell + vec2(7.1, face));
+                        vec3  tint = mix(vec3(0.8, 0.9, 1.0), vec3(1.0, 0.85, 0.7), hue);
+                        col += (core + (spikeH + spikeV) * 0.12) * sz * tint * 6.0;
+                    }
+                }
+
+                // Very faint nebula wisps (NOT cloudy – just a hint of colour)
+                {
+                    vec2 np = uv * 2.5 + face * 5.0;
+                    float n = hash2(floor(np)) * hash2(floor(np * 1.7 + 0.3));
+                    col += mix(vec3(0.0, 0.01, 0.06), vec3(0.03, 0.0, 0.07),
+                               hash2(floor(np))) * n * 0.03;
+                }
+
+                return col;
+            }
+
+            // ──────────────────────────────────────────────────────────────
+            //  MAIN RAYMARCHER
+            // ──────────────────────────────────────────────────────────────
             void main() {
-                // Screen coordinate normalize
                 vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
 
-                // 1. Ray setup: Cast ray using virtual camera vectors (perspective projection)
                 vec3 ro = u_cam_pos;
-                vec3 rd = normalize(u_cam_dir + uv.x * u_cam_right * u_fov_scale + uv.y * u_cam_up * u_fov_scale);
+                vec3 rd = normalize(u_cam_dir + uv.x * u_cam_right * u_fov_scale
+                                              + uv.y * u_cam_up    * u_fov_scale);
 
-                // Runge-Kutta numerical step integration
-                float dt = 0.035;
-                vec3 ray_pos = ro;
-                vec3 ray_dir = rd;
-                
-                vec3 color = vec3(0.0);
+                // Dynamic escape distance: at least 20, or 2.2× camera distance
+                // This ensures background stars are always reachable from large masses.
+                float escapeR = max(20.0, length(ro) * 2.2);
+
+                vec3  ray_pos = ro;
+                vec3  ray_dir = rd;
+                vec3  color   = vec3(0.0);
                 float accumulated_disk_alpha = 0.0;
-                
-                bool hit_horizon = false;
+                bool  hit_horizon = false;
 
-                // General Relativity Raymarching Loop (Gargantua space deformation)
-                const int MAX_STEPS = 180;
+                const int MAX_STEPS = 220;
+                for (int i = 0; i < MAX_STEPS; i++) {
+                    float r2 = dot(ray_pos, ray_pos);
+                    float r  = sqrt(r2);
+
+                    // Adaptive step size: small near BH (accuracy), larger far away (speed)
+                    float dt = clamp(r * 0.012, 0.022, 0.08);
+
+                    // A. Horizon check
+                    float horizon_r = u_rs;
+                    if (u_bh_type > 0.5) {
+                        float rg     = u_rs * 0.5;
+                        float spin_a = u_spin * rg;
+                        horizon_r = rg + sqrt(max(0.001, rg*rg - spin_a*spin_a));
+                    }
+                    if (r < horizon_r) { hit_horizon = true; break; }
+
+                    // B. Dynamic escape to background
+                    if (r > escapeR) break;
+
+                    // C. Gravitational lensing (geodesic deflection)
+                    if (u_lensing_enabled > 0.5) {
+                        float deflection = (3.0 * u_rs) / (r2 * r);
+                        vec3  L = cross(ray_pos, ray_dir);
+                        vec3  deflection_force = cross(L, ray_pos) * deflection * dt;
+
+                        vec3 frame_dragging = vec3(0.0);
+                        if (u_bh_type > 0.5) {
+                            vec3 spin_axis = vec3(0.0, 0.0, 1.0);
+                            frame_dragging = cross(spin_axis, ray_pos)
+                                           * (2.0 * u_spin * u_rs / (r2 * r2)) * dt;
+                        }
+                        ray_dir += deflection_force + frame_dragging;
+                        ray_dir  = normalize(ray_dir);
+                    }
+
+                    // D. Quasar jets (volumetric accumulation)
+                    if (u_bh_type > 1.5) {
+                        float d_axis   = length(ray_pos.xy);
+                        float jet_width = u_rs * (0.35 + abs(ray_pos.z) * 0.08);
+                        float collimation = smoothstep(jet_width * 2.2, jet_width * 0.2, d_axis);
+                        if (collimation > 0.001) {
+                            float radial_decay = exp(-r * 0.16);
+                            float jet_noise = noise3(vec3(ray_pos.xy * 8.0,
+                                                          ray_pos.z  * 2.2 - u_time * 6.5));
+                            vec3  jet_color = mix(vec3(0.42,0.08,0.98), vec3(0.0,0.65,1.0), jet_noise);
+                            float step_intensity = collimation * radial_decay
+                                                 * (0.3 + 0.7 * jet_noise)
+                                                 * u_accretion_rate * dt * 4.2;
+                            color += jet_color * step_intensity * (1.0 - accumulated_disk_alpha);
+                        }
+                    }
+
+                    // E. Accretion disk (equatorial plane crossing)
+                    float z_prev = ray_pos.z;
+                    ray_pos += ray_dir * dt;
+                    float z_curr = ray_pos.z;
+
+                    if ((z_prev > 0.0 && z_curr < 0.0) || (z_prev < 0.0 && z_curr > 0.0)) {
+                        float t_plane = -z_prev / (z_curr - z_prev);
+                        vec3  hit_pos = ray_pos - ray_dir * (1.0 - t_plane) * dt;
+                        float dist    = length(hit_pos.xy);
+
+                        float r_isco  = u_rs * (u_bh_type > 0.5 ? (3.0 - 2.3*u_spin) : 3.0);
+                        float r_outer = u_rs * 12.0;   // wider outer edge, always visible
+
+                        if (dist > r_isco && dist < r_outer) {
+                            float angle = atan(hit_pos.y, hit_pos.x);
+                            float w     = 2.8 / (dist * sqrt(dist));
+                            float spin_contrib = (u_bh_type > 0.5) ? (u_spin * 2.0 / pow(dist, 2.0)) : 0.0;
+                            float angle_sheared = angle - u_time * (1.6 / pow(dist, 1.5) + spin_contrib);
+
+                            vec2  p2       = vec2(hit_pos.xy * 8.0);
+                            float noise_val = fbm(vec3(p2, angle_sheared * 5.5));
+                            noise_val += 0.5  * fbm(vec3(p2 * 2.0, angle_sheared * 12.0 - u_time));
+                            noise_val += 0.25 * fbm(vec3(p2 * 4.0, angle_sheared * 24.0));
+
+                            float norm_r  = (dist - r_isco) / (r_outer - r_isco); // 0..1
+                            float density = smoothstep(0.0, 0.06, norm_r)
+                                          * (1.0 - smoothstep(0.65, 1.0, norm_r));
+                            density = pow(density, 1.4);
+
+                            float incidence_angle = abs(ray_dir.z);
+                            float volumetric_opacity = clamp(density / (incidence_angle + 0.05), 0.0, 1.0);
+
+                            float sharp_noise = pow(abs(noise_val), 3.0) * 1.5;
+                            float brightness  = (0.05 + 0.95 * sharp_noise) * density
+                                              * u_accretion_rate * 3.5;
+
+                            // Colour: blinding white near ISCO → deep red outer
+                            vec3 disk_col = vec3(0.85, 0.20, 0.02);
+                            if (norm_r < 0.25) {
+                                disk_col = mix(vec3(1.0, 0.45, 0.05), vec3(1.6, 1.5, 1.4),
+                                               pow(1.0 - norm_r / 0.25, 2.0));
+                            }
+
+                            // Relativistic Doppler beaming
+                            float doppler_factor = 1.0;
+                            if (u_doppler_enabled > 0.5) {
+                                float v_orb     = 0.58 * sqrt(u_rs / dist);
+                                vec3  disk_vel  = normalize(vec3(-hit_pos.y, hit_pos.x, 0.0)) * v_orb;
+                                float cos_theta = dot(disk_vel, ray_dir);
+                                float gamma     = 1.0 / sqrt(1.0 - dot(disk_vel, disk_vel));
+                                doppler_factor  = pow(1.0 / (gamma * (1.0 - cos_theta)), 3.0);
+                                disk_col = mix(vec3(0.35,0.01,0.0), disk_col,
+                                               smoothstep(0.4, 0.9, doppler_factor));
+                                disk_col = mix(disk_col, vec3(0.7,0.92,1.0),
+                                               smoothstep(1.0, 2.3, doppler_factor));
+                            }
+
+                            // Gravitational redshift
+                            float redshift_factor = 1.0;
+                            if (u_redshift_enabled > 0.5) {
+                                redshift_factor = sqrt(max(0.0, 1.0 - u_rs / dist));
+                                disk_col = mix(vec3(0.35,0.005,0.0), disk_col, redshift_factor);
+                            }
+
+                            vec3  final_disk = disk_col * brightness * doppler_factor * redshift_factor;
+                            float alpha      = volumetric_opacity * clamp(brightness, 0.0, 1.0);
+
+                            color += final_disk * alpha * (1.0 - accumulated_disk_alpha);
+                            accumulated_disk_alpha += alpha * (1.0 - accumulated_disk_alpha);
+
+                            if (accumulated_disk_alpha >= 0.98) break;
+                        }
+                    }
+                }
+
+                // Final composite
+                if (hit_horizon) {
+                    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+                } else {
+                    // Procedural background – handles any ray direction, no seams
+                    vec3 stars      = cosmicBackground(ray_dir);
+                    vec3 final_col  = color + stars * (1.0 - accumulated_disk_alpha);
+                    gl_FragColor    = vec4(final_col, 1.0);
+                }
+            }
+        `;
+
+        // Create the shader material
                 for (int i = 0; i < MAX_STEPS; i++) {
                     float r2 = dot(ray_pos, ray_pos);
                     float r = sqrt(r2);
@@ -395,17 +606,18 @@ class BlackHoleSimulation {
                             density = pow(density, 1.5); // sharpen edge
                             
                             // Pseudo-volumetric opacity based on grazing angle
-                            // Rays hitting the disk horizontally (ray_dir.z ~ 0) pass through more gas
                             float incidence_angle = abs(ray_dir.z);
                             float volumetric_opacity = clamp(density / (incidence_angle + 0.05), 0.0, 1.0);
 
-                            float brightness = (0.3 + 0.7 * noise_val) * density * u_accretion_rate * 2.5;
+                            // INTERSTELLAR LEVEL 2: Cubing the noise creates extreme dark dust lanes and bright strands
+                            float sharp_noise = pow(abs(noise_val), 3.0) * 1.5;
+                            float brightness = (0.05 + 0.95 * sharp_noise) * density * u_accretion_rate * 3.5;
                             
                             // High-end blackbody radiation gradient
-                            vec3 disk_base_color = vec3(0.9, 0.25, 0.05); // Deep red outer edge
-                            if (dist < r_isco * 2.0) {
-                                // Hot orange to blinding white at inner ISCO
-                                disk_base_color = mix(vec3(1.0, 0.5, 0.1), vec3(1.0, 0.95, 0.9), (r_isco * 2.0 - dist) / (r_isco * 1.0));
+                            vec3 disk_base_color = vec3(0.85, 0.20, 0.02); // Deep red outer edge
+                            if (dist < r_isco * 2.5) {
+                                // Hot orange to BLINDING white at inner ISCO
+                                disk_base_color = mix(vec3(1.0, 0.45, 0.05), vec3(1.5, 1.4, 1.3), pow((r_isco * 2.5 - dist) / (r_isco * 1.5), 2.0));
                             }
 
                             // Relativistic Doppler Beaming
@@ -478,13 +690,33 @@ class BlackHoleSimulation {
         window.addEventListener("resize", () => this.resize());
     }
 
+    // Compute the normalised Schwarzschild radius used by the shader.
+    // Maps mass logarithmically so that:
+    //   3   M☉ → u_rs ≈ 0.10  (stellar black hole)
+    //   12  M☉ → u_rs ≈ 0.18  (reference / previous default)
+    //   1e6 M☉ → u_rs ≈ 0.38  (galactic centre)
+    //   6.6e10 M☉ (TON618) → u_rs ≈ 0.65
+    computeShaderRs() {
+        const logMass = Math.log10(Math.max(3.0, this.mass));
+        // Linear map:  log10(3) ≈ 0.477  →  0.10
+        //              log10(6.6e10) ≈ 10.82 → 0.65
+        return 0.10 + (logMass - 0.477) / (10.82 - 0.477) * (0.65 - 0.10);
+    }
+
     syncVirtualCameraToSliders() {
-        // Dynamic camera distance: slightly zoom in/out based on mass to give a subtle sense of scale
-        const scaleFactor = 1.0 - Math.log10(Math.max(1.0, this.mass)) * 0.03;
-        const r = 4.5 * scaleFactor;
+        const rs = this.computeShaderRs();
+
+        // Camera orbit radius grows proportionally with the horizon so the BH always
+        // fills a similar fraction of the screen regardless of mass.
+        // At rs=0.10 → r=3.5;  at rs=0.65 → r=10.0
+        const r = 3.5 + (rs - 0.10) / (0.65 - 0.10) * (10.0 - 3.5);
+
+        // Mild FOV compression for aesthetic effect (still feels like optical zoom but
+        // the actual size change now comes from u_rs).
+        this.virtualCamera.fov = 50.0;
+        this.virtualCamera.updateProjectionMatrix();
+
         const pitchRad = (this.pitchAngle / 180) * Math.PI;
-        
-        // Position on circle in Y-Z plane
         this.virtualCamera.position.set(0.0, -r * Math.cos(pitchRad), r * Math.sin(pitchRad));
         this.virtualCamera.lookAt(0, 0, 0);
     }
@@ -647,10 +879,11 @@ class BlackHoleSimulation {
 
         // 2. Smoothly update uniforms
         this.uniforms.u_time.value += 0.015;
-        
-        // Scale-invariant shader size to prevent clipping for huge masses (TON 618)
-        // The shader mathematical size remains completely constant to preserve Kerr geodesics geometry perfectly
-        this.uniforms.u_rs.value = 0.18;
+
+        // ── FIX: scale the shader horizon radius with mass ──────────────────
+        // This is the value that actually controls how big the black hole
+        // appears in the fragment shader (event horizon, disk bounds, lensing).
+        this.uniforms.u_rs.value = this.computeShaderRs();
 
         this.uniforms.u_accretion_rate.value = this.accretionRate;
         this.uniforms.u_doppler_enabled.value = this.dopplerEffect ? 1.0 : 0.0;

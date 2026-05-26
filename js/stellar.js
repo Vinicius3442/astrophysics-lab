@@ -149,18 +149,18 @@ class StellarSimulation {
             this.showInternal = e.target.checked;
             this.internalLayersGroup.visible = this.showInternal;
             if (this.showInternal) {
-                // Apply clipping plane to create a clean visual cross-section 
-                this.starMat.clippingPlanes = [this.clipPlane];
-                this.coronaMat.clippingPlanes = [this.clipPlane];
+                // Ativa lâmina de corte matemática via shader uniform
+                this.starMat.uniforms.u_clip.value = 1.0;
                 this.starMat.side = THREE.DoubleSide; // Show inner hollow
                 this.starMat.transparent = false; // keep solid
+                this.coronaMesh.visible = false;
             } else {
                 // Remove clipping
-                this.starMat.clippingPlanes = [];
-                this.coronaMat.clippingPlanes = [];
+                this.starMat.uniforms.u_clip.value = 0.0;
                 this.starMat.side = THREE.FrontSide;
                 this.starMat.transparent = false;
                 this.starMat.opacity = 1.0;
+                this.coronaMesh.visible = true;
                 this.coronaMat.transparent = true;
                 this.coronaMat.opacity = 0.35;
             }
@@ -181,9 +181,6 @@ class StellarSimulation {
             // The user can rotate/zoom and clicks the Reset button manually to restart
         });
 
-        // 2. Real & Exotic Stars Select Event Listener (Simulated API Fetch)
-        this.selectExotic.addEventListener("change", (e) => {
-            const val = e.target.value;
         // Custom Star Button
         this.btnCustomStar.addEventListener("click", () => {
             this.selectedExotic = 'custom';
@@ -342,9 +339,11 @@ class StellarSimulation {
             uniforms: {
                 u_time: { value: 0.0 },
                 u_color: { value: new THREE.Color(0xffd700) },
-                u_opacity: { value: 1.0 }
+                u_opacity: { value: 1.0 },
+                u_clip: { value: 0.0 }
             },
             transparent: false,
+            side: THREE.FrontSide,
             opacity: 1.0,
             vertexShader: `
                 varying vec3 vNormal;
@@ -359,6 +358,7 @@ class StellarSimulation {
                 uniform float u_time;
                 uniform vec3 u_color;
                 uniform float u_opacity;
+                uniform float u_clip;
                 varying vec3 vNormal;
                 varying vec3 vPosition;
 
@@ -375,8 +375,7 @@ class StellarSimulation {
                         mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
                             mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
                         mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
-                            mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z
-                    );
+                            mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
                 }
                 float fbm(vec3 p) {
                     float v = 0.0;
@@ -390,6 +389,9 @@ class StellarSimulation {
                     return v;
                 }
                 void main() {
+                    if (u_clip > 0.5 && vPosition.x > 0.0) {
+                        discard;
+                    }
                     vec3 coord = vPosition * 4.5;
                     coord.y -= u_time * 0.38;
                     coord.x += sin(u_time * 0.12) * 0.15;
@@ -820,6 +822,14 @@ class StellarSimulation {
         this.valLum.textContent = window.formatScientific(this.lum);
         this.metricRadius.textContent = this.radius.toFixed(2) + " R⊙";
         this.metricTc.textContent = (this.tc / 1e6).toFixed(1) + " Milhões K";
+        
+        // Atualiza monitor de Fusão Nuclear (DOM)
+        const ppPct = Math.round(this.ppFraction * 100);
+        const cnoPct = Math.round(this.cnoFraction * 100);
+        this.valPP.textContent = ppPct + "%";
+        this.barPP.style.width = ppPct + "%";
+        this.valCNO.textContent = cnoPct + "%";
+        this.barCNO.style.width = cnoPct + "%";
         
         // Estimate central core pressure (hydrostatic equilibrium approximation)
         const centralPressure = this.mass * this.mass / Math.pow(this.radius, 4);

@@ -29,6 +29,7 @@
                 <button class="tab-btn" data-tab="kepler">LEIS DE KEPLER</button>
                 <button class="tab-btn" data-tab="stellar">FÍSICA ESTELAR</button>
                 <button class="tab-btn" data-tab="blackhole">HORIZONTE DE EVENTOS</button>
+                <button class="tab-btn" data-tab="pulsar">PULSARES MAGNÉTICOS</button>
             </div>
 
             <div class="system-status">
@@ -93,6 +94,23 @@
                         <div class="lobby-card-info">
                             <h3>Buraco Negro de Schwarzschild</h3>
                             <p>Explore as lentes gravitacionais relativísticas ao redor da singularidade de Gargantua. Controle a câmera tridimensional em órbita com mouse e zoom nas geodésicas de Schwarzschild.</p>
+                        </div>
+                        <div class="lobby-card-footer">
+                            <button class="enter-sim-btn">
+                                Acessar Módulo
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- CARD 4: PULSAR -->
+                    <div class="lobby-card card-pulsar" data-tab="pulsar">
+                        <div class="lobby-card-image" style="background: linear-gradient(45deg, #100b21, #2b0f4c);">
+                            <div class="lobby-card-graphic"></div>
+                        </div>
+                        <div class="lobby-card-info">
+                            <h3>Pulsar (Estrela de Nêutrons)</h3>
+                            <p>Experimente a rotação alucinante e os jatos polares relativísticos (efeito farol) de uma estrela morta superdensa. Controle campos magnéticos monstruosos a nível de Magnetar.</p>
                         </div>
                         <div class="lobby-card-footer">
                             <button class="enter-sim-btn">
@@ -487,6 +505,71 @@ a³ = 1.00 | Razão T²/a³ = 1.000</div>
                     </div>
                 </div>
             </section>
+
+            <!-- 4. PULSAR (MAGNETAR) SIMULATION -->
+            <section id="tab-pulsar" class="simulation-view">
+                <div class="sim-canvas-container" id="pulsar-container">
+                    <div class="overlay-hud">
+                        <div class="hud-box">
+                            <div class="hud-title">FÍSICA DE NÊUTRONS</div>
+                            <div class="hud-metric">
+                                <span class="metric-label">RAIO DO NÚCLEO:</span>
+                                <span class="metric-value" id="metric-p-radius">12.0 km</span>
+                            </div>
+                            <div class="hud-metric">
+                                <span class="metric-label">GRAVIDADE DE SUPERFÍCIE:</span>
+                                <span class="metric-value" id="metric-p-gravity">2.0x10^11 G</span>
+                            </div>
+                            <div class="hud-metric">
+                                <span class="metric-label">ENERGIA CINÉTICA ROTACIONAL:</span>
+                                <span class="metric-value" id="metric-p-energy">1.0x10^42 J</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sim-controls panel-dark">
+                    <h2>Pulsar / Magnetar</h2>
+                    <p class="panel-desc">Estrela de nêutrons degenerada, girando com campos magnéticos extremos.</p>
+                    
+                    <div class="control-group">
+                        <h3>Parâmetros Físicos</h3>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Massa Remanescente (M⊙)</span>
+                                <input type="number" id="pulsar-mass-num" class="input-num" value="1.4" min="1.1" max="2.1" step="0.1">
+                            </div>
+                            <input type="range" id="pulsar-mass" min="1.1" max="2.1" step="0.1" value="1.4">
+                        </div>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Taxa de Rotação (Hertz)</span>
+                                <input type="number" id="pulsar-spin-num" class="input-num" value="30" min="1" max="716" step="1">
+                            </div>
+                            <input type="range" id="pulsar-spin" min="1" max="716" step="1" value="30">
+                            <div class="input-desc">Pulsar do Caranguejo gira a ~30Hz. O limite de ruptura é ~716Hz.</div>
+                        </div>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Campo Magnético (Tesla)</span>
+                                <input type="number" id="pulsar-mag-num" class="input-num" value="100000000" min="10000" max="100000000000" step="100000">
+                            </div>
+                            <input type="range" id="pulsar-mag" min="10000" max="100000000000" step="10000000" value="100000000">
+                            <div class="input-desc">Acima de 10⁹ Tesla o objeto se comporta como um Magnetar — jatos viram violeta ultravioleta.</div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" style="border-color: rgba(0,245,212,0.25); background: rgba(0,245,212,0.03);">
+                        <h3 style="color: var(--accent-cyan);">Controles da Câmera</h3>
+                        <p style="font-size:0.72rem; color: var(--text-secondary); line-height: 1.5;">
+                            🖱️ <strong>Arrastar</strong> — orbitar ao redor da estrela<br>
+                            🖱️ <strong>Scroll</strong> — zoom in/out<br>
+                            ✨ <strong>Efeito farol:</strong> orbite até alinhar com um jato polar para ver o flash!
+                        </p>
+                    </div>
+                </div>
+            </section>
+
         </main>
     </div>
 
@@ -505,5 +588,6 @@ a³ = 1.00 | Razão T²/a³ = 1.000</div>
     <script src="js/kepler.js"></script>
     <script src="js/stellar.js"></script>
     <script src="js/blackhole.js"></script>
+    <script src="js/pulsar.js"></script>
 </body>
 </html>

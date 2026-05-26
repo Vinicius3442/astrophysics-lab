@@ -993,3 +993,238 @@ input:checked + .slider-switch:before {
     color: var(--text-secondary);
     margin-top: 2px;
 }
+
+/* ==========================================
+   PULSAR / MAGNETAR SIMULATION STYLES
+   ========================================== */
+
+/* Lobby Card - Pulsar */
+.lobby-card.card-pulsar:hover::after {
+    border-color: #00f5d4;
+    box-shadow: inset 0 0 15px rgba(0, 245, 212, 0.08);
+}
+
+.card-pulsar .lobby-card-image {
+    background: radial-gradient(circle at center, #0a1a2e 0%, #030812 100%);
+}
+
+.card-pulsar .lobby-card-graphic {
+    width: 64px;
+    height: 64px;
+    background: radial-gradient(circle, #ffffff 0%, #80e0ff 30%, #0088cc 60%, transparent 80%);
+    box-shadow: 0 0 30px rgba(0,200,255,0.9), 0 0 60px rgba(0,150,255,0.5), 0 0 100px rgba(80,0,200,0.3);
+    animation: pulsarBeat 0.5s ease-in-out infinite alternate;
+    border-radius: 50%;
+}
+
+.card-pulsar .lobby-card-graphic::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 240%;
+    height: 5px;
+    background: linear-gradient(90deg, transparent 0%, rgba(0,245,212,0.9) 35%, rgba(255,255,255,1) 50%, rgba(0,245,212,0.9) 65%, transparent 100%);
+    transform: translate(-50%, -50%);
+    border-radius: 3px;
+    box-shadow: 0 0 12px rgba(0,245,212,0.8);
+    animation: beamSweep 0.9s linear infinite;
+    transform-origin: center center;
+}
+
+.card-pulsar .lobby-card-graphic::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 240%;
+    height: 5px;
+    background: linear-gradient(90deg, transparent 0%, rgba(157,78,221,0.8) 35%, rgba(200,100,255,1) 50%, rgba(157,78,221,0.8) 65%, transparent 100%);
+    transform: translate(-50%, -50%);
+    border-radius: 3px;
+    animation: beamSweep2 0.9s linear infinite;
+    transform-origin: center center;
+}
+
+@keyframes pulsarBeat {
+    0%   { box-shadow: 0 0 25px rgba(0,200,255,0.9), 0 0 50px rgba(0,150,255,0.4); }
+    100% { box-shadow: 0 0 45px rgba(0,220,255,1.0), 0 0 90px rgba(0,150,255,0.7), 0 0 140px rgba(80,0,200,0.4); }
+}
+
+@keyframes pulsarSpin {
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes beamSweep {
+    0%   { transform: translate(-50%, -50%) rotate(0deg); }
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes beamSweep2 {
+    0%   { transform: translate(-50%, -50%) rotate(30deg); }
+    100% { transform: translate(-50%, -50%) rotate(390deg); }
+}
+
+/* Pulsar Simulation Layout */
+#tab-pulsar {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+}
+
+/* Three.js Canvas Container for fullscreen sims */
+.sim-canvas-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: radial-gradient(circle at center, #050318 0%, #030308 100%);
+}
+
+.sim-canvas-container canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* HUD Overlay (Physics readouts on the canvas) */
+.overlay-hud {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 5;
+    pointer-events: none;
+}
+
+.hud-box {
+    background: rgba(5, 5, 18, 0.75);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 245, 212, 0.2);
+    border-radius: 10px;
+    padding: 16px 20px;
+    min-width: 300px;
+    box-shadow: 0 0 25px rgba(0, 245, 212, 0.07), 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.hud-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--accent-cyan);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(0, 245, 212, 0.15);
+}
+
+.hud-metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 4px 0;
+    font-size: 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.hud-metric:last-child {
+    border-bottom: none;
+}
+
+.hud-metric .metric-label {
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    letter-spacing: 0.5px;
+}
+
+.hud-metric .metric-value {
+    color: var(--accent-cyan);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+/* Pulsar Controls Panel */
+.sim-controls {
+    background: var(--panel-bg);
+    backdrop-filter: blur(12px);
+    border-left: 1px solid var(--panel-border);
+    padding: 25px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+    z-index: 5;
+    height: 100%;
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+}
+
+.sim-controls::-webkit-scrollbar {
+    width: 4px;
+}
+.sim-controls::-webkit-scrollbar-thumb {
+    background: var(--panel-border);
+    border-radius: 2px;
+}
+
+.panel-dark {
+    /* Extra specificity for sim-controls panels with accent styling */
+}
+
+.sim-controls h2 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--accent-cyan);
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--panel-border);
+}
+
+.sim-controls .panel-desc {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: -10px;
+    line-height: 1.4;
+}
+
+/* Numeric input style matching the Pulsar sidebar */
+.input-num {
+    background: rgba(10, 10, 20, 0.8);
+    border: 1px solid rgba(0, 245, 212, 0.2);
+    color: var(--accent-cyan);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    width: 90px;
+    padding: 5px 8px;
+    border-radius: 5px;
+    text-align: right;
+    outline: none;
+    transition: all 0.3s;
+    flex-shrink: 0;
+}
+
+.input-num:focus {
+    border-color: var(--accent-cyan);
+    box-shadow: 0 0 8px rgba(0, 245, 212, 0.3);
+}
+
+.input-num::-webkit-outer-spin-button,
+.input-num::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.input-num[type=number] {
+    -moz-appearance: textfield;
+}
+
+/* Small description text below sliders */
+.input-desc {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    line-height: 1.35;
+    font-style: italic;
+    padding-top: 2px;
+}
