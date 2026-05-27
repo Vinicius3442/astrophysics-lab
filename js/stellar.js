@@ -451,40 +451,33 @@ class StellarSimulation {
                         discard; // Cross-section active
                     }
                     
-                    // Animated coordinates for boiling plasma
                     vec3 coord = vPosition * 5.0;
                     coord.y -= u_time * 0.4;
                     coord.z += sin(u_time * 0.2) * 0.2;
                     
                     float n = fbm(coord);
-                    
-                    // Thermal Color Palettes
                     vec3 baseColor = u_color;
                     
-                    // Extremely hot core spots
-                    vec3 hotColor = mix(baseColor, vec3(1.0, 1.0, 1.0), 0.7);
+                    vec3 hotColor = mix(baseColor, vec3(1.0, 1.0, 1.0), 0.85);
+                    vec3 coolColor = mix(baseColor, vec3(0.05, 0.0, 0.0), 0.8);
                     
-                    // Cool sunspots / darker convection sinks
-                    vec3 coolColor = mix(baseColor, vec3(0.1, 0.0, 0.0), 0.8);
-                    
-                    // Adjust cool color to deep blue if star is a blue/white O-B type
                     if (u_color.b > 0.8 && u_color.r < 0.4) {
-                        coolColor = mix(baseColor, vec3(0.0, 0.05, 0.3), 0.8);
-                        hotColor = mix(baseColor, vec3(0.8, 0.9, 1.0), 0.7);
+                        coolColor = mix(baseColor, vec3(0.0, 0.02, 0.2), 0.8);
+                        hotColor = mix(baseColor, vec3(0.9, 0.95, 1.0), 0.85);
                     }
                     
-                    // Non-linear mapping to create stark contrast (granules)
                     n = smoothstep(0.3, 0.8, n + vNoise * 2.0);
                     vec3 surfaceColor = mix(coolColor, hotColor, n);
                     
-                    // Fresnel edge glow (HDR Bloom Simulation)
+                    // Intense HDR Fresnel (Bloom Core)
                     float ndotv = dot(normalize(vNormal), vec3(0.0, 0.0, 1.0));
-                    float rim = pow(1.0 - max(0.0, ndotv), 1.8);
+                    float fresnel = pow(1.0 - max(0.0, ndotv), 2.5); // Sharper, more intense edge
                     
-                    vec3 finalColor = surfaceColor + baseColor * rim * 1.5;
+                    // Additive incandescent bloom
+                    vec3 finalColor = surfaceColor * 1.5 + baseColor * fresnel * 4.0 + vec3(fresnel * 0.5);
                     
-                    // High exposure tone mapping for brightness
-                    finalColor = finalColor * (2.51 * finalColor + 0.03) / (finalColor * (2.43 * finalColor + 0.59) + 0.14);
+                    // ACES Film Tone Mapping for Photorealism
+                    finalColor = (finalColor * (2.51 * finalColor + 0.03)) / (finalColor * (2.43 * finalColor + 0.59) + 0.14);
                     
                     gl_FragColor = vec4(finalColor, u_opacity);
                 }
@@ -501,15 +494,143 @@ class StellarSimulation {
         this.starMesh = new THREE.Mesh(this.starGeo, this.starMat);
         this.scene.add(this.starMesh);
 
-        // Corona / Soft Outer Aura (Additive blending)
-        this.coronaGeo = new THREE.SphereGeometry(1.06, 32, 32);
-        this.coronaMat = new THREE.MeshBasicMaterial({
-            color: 0xffa500,
+        // Corona / Soft Outer Aura (Volumetric Raymarching)
+        this.coronaGeo = new THREE.SphereGeometry(3.0, 32, 32); // Large bounding box for dust
+        this.coronaMat = new THREE.ShaderMaterial({
+            uniforms: {
+                u_time: { value: 0.0 },
+                u_color: { value: new THREE.Color(0xffffff) },
+                u_isWolfRayet: { value: 0.0 },
+                u_coreRadius: { value: 1.0 },
+                u_coronaRadius: { value: 3.0 }
+            },
+            vertexShader: `
+                varying vec3 vWorldPos;
+                void main() {
+                    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                    vWorldPos = worldPosition.xyz;
+                    gl_Position = projectionMatrix * viewMatrix * worldPosition;
+                }
+            `,
+            fragmentShader: `
+                uniform float u_time;
+                uniform vec3 u_color;
+                uniform float u_isWolfRayet;
+                uniform float u_coreRadius;
+                uniform float u_coronaRadius;
+                varying vec3 vWorldPos;
+                
+                float hash(vec3 p) {
+                    p = fract(p * 0.3183099 + vec3(0.1));
+                    p *= 17.0;
+                    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+                }
+                float noise(vec3 x) {
+                    vec3 i = floor(x);
+                    vec3 f = fract(x);
+                    f = f * f * (3.0 - 2.0 * f);
+                    return mix(
+                        mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
+                            mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+                        mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
+                            mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
+                }
+                float fbm(vec3 p) {
+                    float v = 0.0;
+                    float a = 0.5;
+                    vec3 shift = vec3(100.0);
+                    for (int i = 0; i < 4; ++i) {
+                        v += a * noise(p);
+                        p = p * 2.0 + shift;
+                        a *= 0.5;
+                    }
+                    return v;
+                }
+
+                void main() {
+                    vec3 ro = cameraPosition;
+                    vec3 rd = normalize(vWorldPos - ro);
+                    
+                    // Sphere intersection with dynamic corona radius
+                    float b = dot(ro, rd);
+                    float c = dot(ro, ro) - (u_coronaRadius * u_coronaRadius);
+                    float disc = b*b - c;
+                    
+                    if (disc < 0.0) discard;
+                    
+                    float tNear = max(0.0, -b - sqrt(disc));
+                    float tFar = -b + sqrt(disc);
+                    
+                    int STEPS = 45;
+                    float tStep = (tFar - tNear) / float(STEPS);
+                    float t = tNear;
+                    
+                    vec3 col = vec3(0.0);
+                    float transmit = 1.0;
+                    
+                    for(int i=0; i<45; i++) {
+                        vec3 p = ro + rd * t;
+                        float r = length(p);
+                        
+                        // Dynamic Core blockage
+                        if (r < u_coreRadius * 0.95) { // Slightly inside surface to prevent artifacts
+                            transmit = 0.0;
+                            break;
+                        }
+                        
+                        // Corona logic
+                        float density = 0.0;
+                        vec3 emitCol = vec3(0.0);
+                        
+                        // Normalize local R based on core
+                        float normR = r / u_coreRadius; 
+                        
+                        if (u_isWolfRayet > 0.5) {
+                            float wave = sin(normR * 10.0 - u_time * 3.0) * 0.5 + 0.5;
+                            vec3 pNoise = (p / u_coreRadius) * 2.5 - vec3(u_time * 0.2);
+                            float n = fbm(pNoise);
+                            
+                            float dustDensity = smoothstep(0.4, 0.8, n * wave) * exp(-(normR-1.0)*1.5) * 6.0;
+                            
+                            density = dustDensity;
+                            emitCol = mix(vec3(0.8, 0.2, 0.1), u_color, smoothstep(0.0, 1.0, density)) * (1.0 / (normR*normR));
+                        } else {
+                            float n = fbm((p / u_coreRadius) * 4.0 - vec3(0.0, u_time*0.5, 0.0));
+                            float coronaDensity = exp(-(normR - 1.0) * 5.0) * (n * 0.6 + 0.4);
+                            density = coronaDensity * 0.9;
+                            emitCol = u_color * 1.8;
+                        }
+                        
+                        if (density > 0.01) {
+                            // Scale step contribution so small stars don't get over-dense
+                            float stepFactor = tStep / u_coreRadius; 
+                            col += emitCol * density * transmit * stepFactor * 2.0;
+                            transmit *= exp(-density * stepFactor * 3.0);
+                        }
+                        
+                        if (transmit < 0.01) break;
+                        t += tStep;
+                    }
+                    
+                    // ACES Tone Mapping for volumetric glow to match star body
+                    col = (col * (2.51 * col + 0.03)) / (col * (2.43 * col + 0.59) + 0.14);
+                    
+                    gl_FragColor = vec4(col, 1.0 - transmit);
+                }
+            `,
             transparent: true,
-            opacity: 0.35,
             blending: THREE.AdditiveBlending,
+            depthWrite: false,
             side: THREE.BackSide
         });
+        
+        // Setup intercept for corona colors
+        this.coronaMat.color = {
+            setHex: (hex) => {
+                this.coronaMat.uniforms.u_color.value.setHex(hex);
+            }
+        };
+
         this.coronaMesh = new THREE.Mesh(this.coronaGeo, this.coronaMat);
         this.scene.add(this.coronaMesh);
 
@@ -1187,6 +1308,12 @@ class StellarSimulation {
             this.starMat.uniforms.u_time.value += 0.012;
             this.starMat.uniforms.u_opacity.value = this.starMat.opacity;
         }
+        
+        // Update Corona volumetric uniforms
+        if (this.coronaMat && this.coronaMat.uniforms && this.coronaMat.uniforms.u_time) {
+            this.coronaMat.uniforms.u_time.value += 0.012;
+            this.coronaMat.uniforms.u_isWolfRayet.value = (this.selectedExotic === 'wolf_rayet') ? 1.0 : 0.0;
+        }
 
         // Rotate the star for realistic convection feeling
         if (this.state !== 'nebula' && this.state !== 'remanent') {
@@ -1270,6 +1397,12 @@ class StellarSimulation {
         if (this.state === 'main_sequence') {
             const scalePulse = 1.0 + Math.sin(performance.now() * 0.002) * 0.015;
             this.coronaMesh.scale.copy(this.starMesh.scale).multiplyScalar(1.05 * scalePulse);
+        }
+        
+        // Sync dynamic scales to shaders for Raymarching precision
+        if (this.coronaMat && this.coronaMat.uniforms && this.coronaMat.uniforms.u_coreRadius) {
+            this.coronaMat.uniforms.u_coreRadius.value = this.starMesh.scale.x;
+            this.coronaMat.uniforms.u_coronaRadius.value = 3.0 * this.coronaMesh.scale.x;
         }
 
         this.renderer.render(this.scene, this.camera);

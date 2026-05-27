@@ -221,6 +221,52 @@ class BlackHoleSimulation {
                             vec3 frame_drag = cross(spin_axis, ray_pos) * (u_spin * RS * 2.0 / (r2*r2));
                             accel += frame_drag;
                         }
+                    
+                    // D. Relativistic Polar Jets (Active Galactic Nucleus / Quasar)
+                    if (u_bh_type > 1.5 && u_accretion_rate > 0.0) {
+                        float absZ = abs(ray_pos.z);
+                        if (r > RS && absZ > 1.5 * RS) { // Start slightly above disk
+                            float cylR = length(ray_pos.xy);
+                            
+                            // Magnetic confinement: jet widens slowly, then blooms
+                            float jetRadius = RS * (0.1 + pow(absZ * 0.05, 1.5));
+                            
+                            if (cylR < jetRadius) {
+                                float normCylR = cylR / jetRadius;
+                                float jetCore = smoothstep(1.0, 0.0, normCylR);
+                                
+                                // High-speed helical plasma
+                                float angle = atan(ray_pos.y, ray_pos.x);
+                                vec3 jP = vec3(cylR * 4.0, angle * 2.0 - absZ * 0.5, absZ * 1.5 - u_time * 25.0);
+                                float jNoise = fbm(jP);
+                                float jNoise2 = fbm(jP * 3.0 - vec3(0.0, 0.0, u_time * 30.0));
+                                
+                                // Helical twisting threads
+                                float thread = pow(jNoise, 2.0) * (1.0 - abs(jNoise - jNoise2));
+                                
+                                float jDensity = jetCore * thread * exp(-absZ * 0.03) * 5.0;
+                                
+                                if (jDensity > 0.01) {
+                                    vec3 jetCol = mix(vec3(0.1, 0.3, 1.0), vec3(1.0, 0.7, 1.0), jNoise2); // Blue to Magenta
+                                    
+                                    // Relativistic Beaming of the Jet (approaching jet is blinded, receding is dim)
+                                    float dopplerJet = 1.0;
+                                    if (u_doppler_enabled > 0.5) {
+                                        float jetDirZ = sign(ray_pos.z);
+                                        // Ray direction opposes jet direction = blueshift (brighter)
+                                        float align = -ray_dir.z * jetDirZ;
+                                        dopplerJet = 1.0 + align * 1.8; // v_jet ~ 0.9c
+                                        dopplerJet = max(0.1, dopplerJet);
+                                    }
+                                    
+                                    float jIntensity = jDensity * pow(dopplerJet, 3.0) * u_accretion_rate * 2.5;
+                                    
+                                    accumulated_color += jetCol * jIntensity * transmit * dt;
+                                    transmit *= exp(-jDensity * dt * 1.5);
+                                }
+                            }
+                        }
+                    }
                         
                         // Prevent dt from being too large if acceleration is high
                         float accel_mag = length(accel);
@@ -254,17 +300,20 @@ class BlackHoleSimulation {
                                 float angle = atan(ray_pos.y, ray_pos.x);
                                 float time_offset = angle - u_time * v_orbital;
                                 
-                                // High-detail gas turbulence and structured rings
-                                vec3 noise_pos = vec3(r * 4.0, time_offset * 4.0, ray_pos.z * 10.0);
+                                // High-detail gas turbulence and structured rings (Deep Smoke)
+                                vec3 noise_pos = vec3(r * 3.5, time_offset * 5.0, ray_pos.z * 15.0 - u_time * 2.0);
                                 float gas = fbm(noise_pos);
+                                float gas2 = fbm(noise_pos * 2.0 + vec3(15.2));
                                 
-                                // Radial sine rings to create structured plasma bands
-                                float rings = 0.6 + 0.4 * sin(r * 35.0 - u_time * 3.0);
-                                float micro_rings = 0.8 + 0.2 * sin(r * 120.0);
+                                // Cellular structure for glowing plasma veins
+                                float smoke = pow(gas, 1.5) * (1.0 - abs(gas - gas2));
                                 
-                                gas = pow(gas, 1.2) * rings * micro_rings * 1.8;
+                                // Pure fluid dynamics (no artificial sine rings)
+                                float macro_cloud = fbm(vec3(r * 1.5, time_offset * 2.0, u_time * 0.5));
                                 
-                                float final_density = base_density * gas * u_accretion_rate * 3.0;
+                                gas = smoke * macro_cloud * 5.0;
+                                
+                                float final_density = base_density * gas * u_accretion_rate * 4.0;
                                 
                                 // Relativistic Doppler Beaming
                                 float doppler_factor = 1.0;

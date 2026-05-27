@@ -152,10 +152,9 @@ void main() {
     vec3 col = vec3(0.0);
     float transmit = 1.0;
 
-    // --- Pre-detonation Star ---
-    float STAR_R = 0.8;
-    
+    // --- Phase 1: Pre-Detonation ---
     if (u_sim_time < 0.0) {
+        float STAR_R = 0.8;
         // Render massive star
         float b = dot(ro, rd);
         float c_ = dot(ro, ro) - STAR_R*STAR_R;
@@ -168,9 +167,8 @@ void main() {
                 // Boiling surface
                 float nVal = fbm3(n * 4.0 + u_real_time*0.2);
                 vec3 starCol = mix(vec3(1.0, 0.3, 0.1), vec3(1.0, 0.8, 0.5), nVal); // Red Supergiant
-                // If mass > 50, make it a Blue Supergiant
                 if (u_mass > 50.0) {
-                    starCol = mix(vec3(0.2, 0.6, 1.0), vec3(0.8, 0.9, 1.0), nVal);
+                    starCol = mix(vec3(0.2, 0.6, 1.0), vec3(0.8, 0.9, 1.0), nVal); // Blue Supergiant
                 }
                 
                 // Limb darkening
@@ -182,78 +180,119 @@ void main() {
             }
         }
     } 
-    // --- Post-detonation Supernova Explosion ---
-    else {
-        // Physical params scaled for visual
-        // Expansion velocity: ~10,000 km/s -> mapped to visual space
-        // Let's assume visual space 1 unit = 1 million km.
-        float expansionSpeed = 10.0; // Units per second in sim time
-        float shockRadius = STAR_R + u_sim_time * expansionSpeed;
-        float coreTemp = exp(-u_sim_time * 0.5); // Core cools exponentially
+    // --- Phase 2: Core Implosion (0.0 to 0.1s) ---
+    else if (u_sim_time <= 0.1) {
+        float progress = u_sim_time / 0.1;
+        // Exponentially accelerating collapse from 0.8 down to 0.02
+        float currentR = mix(0.8, 0.02, pow(progress, 3.0)); 
         
-        // Raymarching bounds
         float b = dot(ro, rd);
-        float c_ = dot(ro, ro) - (shockRadius*1.5)*(shockRadius*1.5); // bounding sphere slightly larger
+        float c_ = dot(ro, ro) - currentR*currentR;
+        float d = b*b - c_;
+        if (d >= 0.0) {
+            float tHit = -b - sqrt(d);
+            if (tHit > 0.0) {
+                vec3 baseCol = (u_mass > 50.0) ? vec3(0.2, 0.6, 1.0) : vec3(1.0, 0.3, 0.1);
+                vec3 hotCol = vec3(1.0, 1.0, 1.0);
+                // As it compresses, temperature and brightness spike violently
+                col += mix(baseCol, hotCol, progress) * (1.0 + progress * 50.0); 
+                transmit = 0.0;
+            }
+        }
+    }
+    // --- Phase 3 & 4: Bounce, Shockwave & Remanent (> 0.1s) ---
+    else {
+        float expTime = u_sim_time - 0.1;
+        float expansionSpeed = 15.0; // Visual scale km/s mapping
+        float shockRadius = 0.02 + expTime * expansionSpeed;
+        
+        // Raymarch bounds for the expanding shockwave (wider to allow tentacles)
+        float boundRadius = shockRadius * 2.5;
+        float b = dot(ro, rd);
+        float c_ = dot(ro, ro) - boundRadius*boundRadius;
         float disc = b*b - c_;
         
         if (disc >= 0.0) {
             float tNear = max(0.0, -b - sqrt(disc));
             float tFar = -b + sqrt(disc);
             
-            int STEPS = 80;
+            int STEPS = 120; // Increased steps for photorealism
             float tStep = (tFar - tNear) / float(STEPS);
             float t = tNear + hash21(uv)*tStep; // dithering
-
+            
+            float coreTemp = exp(-expTime * 0.4); // Core cools exponentially after flash
+            
             for (int i=0; i<STEPS; i++) {
                 vec3 p = ro + rd * t;
                 float r = length(p);
                 
-                // 1. Core / Neutron Star remnant
-                if (r < 0.1) {
-                    float coreGlow = smoothstep(0.1, 0.0, r);
-                    vec3 cCol = mix(vec3(0.0,0.5,1.0), vec3(1.0), coreGlow);
-                    col += cCol * coreTemp * transmit * 0.5;
-                    transmit *= exp(-coreGlow * 10.0);
+                // 1. Remanent Core (Pulsar / Neutron Star)
+                if (r < 0.05) {
+                    float coreGlow = smoothstep(0.05, 0.0, r);
+                    vec3 cCol = vec3(0.1, 0.8, 1.0); // Intense cyan neutron radiation
+                    col += cCol * coreTemp * transmit * 3.0;
+                    transmit *= exp(-coreGlow * 30.0);
                 }
                 
-                // 2. Shockwave Shell & Dust
-                if (r > 0.1 && r < shockRadius) {
-                    // Normalize position inside the shell [0..1]
-                    float normR = r / shockRadius;
+                // 2. Shockwave Shell & Highly Chaotic Gas (Rayleigh-Taylor instability)
+                if (r > 0.05 && r < boundRadius) {
+                    vec3 dir = normalize(p);
                     
-                    // Rayleigh-Taylor instabilities (fingers of material)
-                    vec3 pNoise = p * (3.0 / shockRadius) + vec3(u_real_time*0.1);
+                    // Macro-Asymmetry: Supernova blasts at different speeds in different directions
+                    float macroNoise = fbm3(dir * 2.0 + vec3(u_real_time * 0.05));
+                    float directionalRadius = shockRadius * (0.3 + macroNoise * 2.0);
+                    
+                    float normR = r / directionalRadius;
+                    
+                    // Domain warping to create extreme stretching (tentacles)
+                    vec3 warp = vec3(fbm3(p * 2.0 + u_real_time*0.1), fbm3(p * 2.2 - u_real_time*0.15), fbm3(p * 1.8 + u_real_time*0.05));
+                    vec3 pWarped = p + warp * (0.5 + expTime * 0.5);
+                    
+                    // Noise coordinates scaling with expansion
+                    vec3 pNoise = pWarped * (3.5 / shockRadius);
                     float shellNoise = fbm3(pNoise);
                     
-                    // Dense shell at the outer edge, empty inside
-                    float shellShape = smoothstep(0.6, 0.95, normR) * smoothstep(1.05, 0.95, normR);
-                    // Add fingers reaching inwards
-                    shellShape += smoothstep(0.2, 0.8, normR) * pow(shellNoise, 3.0);
+                    // Cellular / Worley approximation for intricate web-like filaments (Crab Nebula style)
+                    float n1 = fbm3(pNoise * 2.5);
+                    float n2 = fbm3(pNoise * 2.5 + vec3(14.2, 5.1, -3.8));
+                    float cellular = pow(1.0 - abs(n1 - n2), 5.0); // Sharp glowing veins
                     
-                    float density = shellShape * exp(-u_sim_time * 0.2) * 2.0; // dissipates over time
+                    // Void Cutout: Completely destroys the spherical shape by hiding huge chunks
+                    float voidCut = smoothstep(0.3, 0.7, fbm3(dir * 2.5 + vec3(u_real_time * 0.02)));
+                    
+                    // Rayleigh-Taylor Fingers (highly irregular gas)
+                    float shellShape = smoothstep(0.0, 0.6, normR) * smoothstep(1.8, 0.8, normR);
+                    
+                    // Chaos factor: spikes of density extending outwards + veins
+                    float chaos = pow(shellNoise, 2.5) * 2.0 + cellular * 2.5;
+                    float density = shellShape * chaos * exp(-expTime * 0.2) * 5.0 * voidCut;
                     
                     if (density > 0.01) {
-                        // Temperature color mapping
-                        // Early = hot (white/blue/violet), Mid = orange/red, Late = dark/dust
-                        float tempAge = u_sim_time * 0.15 + (1.0-normR)*0.5; // Outer edge cools faster
+                        float tempAge = expTime * 0.2 + (1.0-normR)*0.5;
                         
-                        vec3 dustCol;
-                        if (tempAge < 0.2) {
-                            dustCol = mix(vec3(1.0, 1.0, 1.0), vec3(0.5, 0.0, 1.0), tempAge/0.2); // Flash to Violet
-                        } else if (tempAge < 0.6) {
-                            dustCol = mix(vec3(0.5, 0.0, 1.0), vec3(1.0, 0.2, 0.0), (tempAge-0.2)/0.4); // Violet to Red
-                        } else if (tempAge < 1.0) {
-                            dustCol = mix(vec3(1.0, 0.2, 0.0), vec3(0.1, 0.0, 0.0), (tempAge-0.6)/0.4); // Red to Dark
-                        } else {
-                            dustCol = vec3(0.01); // Cold dark dust
-                        }
+                        // Chemical mapping based on isolated noise layers (Hubble Palette)
+                        float oxygen = smoothstep(0.3, 1.0, fbm3(pNoise * 1.5 + vec3(12.3))); // Cyan
+                        float hydrogen = smoothstep(0.2, 0.8, fbm3(pNoise * 1.2 + vec3(-5.1))); // Magenta/Red
+                        float sulfur = smoothstep(0.4, 1.0, fbm3(pNoise * 2.0 + vec3(8.8)));  // Yellow/Green
                         
-                        // Illumination from the core
-                        float coreLight = exp(-r * 0.5) * coreTemp * 5.0;
-                        dustCol += vec3(0.5, 0.8, 1.0) * coreLight * shellNoise;
+                        vec3 oCol = vec3(0.05, 0.7, 1.0) * oxygen;
+                        vec3 hCol = vec3(1.0, 0.15, 0.4) * hydrogen;
+                        vec3 sCol = vec3(0.9, 0.8, 0.1) * sulfur;
                         
-                        col += dustCol * density * transmit * tStep * 2.0;
-                        transmit *= exp(-density * tStep * 4.0);
+                        vec3 dustCol = (oCol + hCol + sCol) * 1.5;
+                        
+                        // Heat thermal fallback (bright white/orange right after flash)
+                        vec3 thermalCol = mix(vec3(1.0, 0.8, 0.4), vec3(0.1, 0.0, 0.05), clamp(tempAge * 2.0, 0.0, 1.0));
+                        
+                        // Transition from purely thermal explosion to chemical cooling
+                        dustCol = mix(thermalCol, dustCol, clamp(expTime * 1.5, 0.0, 1.0));
+                        
+                        // Internal Illumination from the pulsar
+                        float coreLight = exp(-r * 0.8) * coreTemp * 8.0;
+                        dustCol += vec3(0.6, 0.9, 1.0) * coreLight * shellNoise;
+                        
+                        col += dustCol * density * transmit * tStep * 3.0;
+                        transmit *= exp(-density * tStep * 5.0);
                     }
                 }
                 
@@ -262,10 +301,10 @@ void main() {
             }
         }
         
-        // Initial flash (blinds the camera)
-        if (u_sim_time > 0.0 && u_sim_time < 0.5) {
-            float flash = pow(1.0 - (u_sim_time / 0.5), 3.0);
-            col += vec3(1.0) * flash * transmit;
+        // Initial Neutrino Burst Flash (Blinds camera temporarily upon bounce)
+        if (expTime > 0.0 && expTime < 0.4) {
+            float flash = pow(1.0 - (expTime / 0.4), 4.0);
+            col += vec3(0.8, 0.95, 1.0) * flash * 3.0 * transmit;
         }
     }
 
@@ -359,11 +398,97 @@ void main() {
             this.btnDetonate.textContent = "DETONAR SUPERNOVA";
             this.btnDetonate.style.backgroundColor = "";
             this.btnDetonate.disabled = false;
-            
-            this.metricTime.textContent = "0.000 s";
-            this.metricRadius.textContent = "0.00 km";
-            this.metricSpeed.textContent = "0 km/s";
             this.metricTemp.textContent = "0 K";
+            
+            // Hide video player if active
+            document.getElementById("sn-video-container").style.display = "none";
+            this.container.style.display = "block";
+            if (this.videoInterval) {
+                clearInterval(this.videoInterval);
+                this.videoInterval = null;
+            }
+        });
+
+        // Video Editor / Pre-renderer Logic
+        this.btnRenderVideo = document.getElementById("btn-sn-render-video");
+        this.videoContainer = document.getElementById("sn-video-container");
+        this.videoFrames = [];
+        
+        this.btnRenderVideo.addEventListener("click", async () => {
+            if (this.isRenderingVideo) return;
+            this.isRenderingVideo = true;
+            this.btnRenderVideo.textContent = "⏳ CALCULANDO FRAMES (0%)...";
+            this.btnRenderVideo.style.background = "#555";
+            
+            // Setup sequence
+            this.isDetonated = true;
+            this.simTime = 0.0;
+            this._realTime = 0.0;
+            
+            const totalFrames = 180; // 3 seconds at 60fps
+            const simTimeTarget = 2.5; // Simulate up to 2.5s of explosion
+            const dt = simTimeTarget / totalFrames;
+            this.videoFrames = [];
+            
+            this.pause(); // Pause live simulation
+            
+            // Render frames asynchronously to not freeze UI
+            for (let i = 0; i < totalFrames; i++) {
+                this.simTime = i * dt;
+                this._realTime = i * dt;
+                this.uniforms.u_sim_time.value = this.simTime;
+                this.uniforms.u_real_time.value = this._realTime;
+                
+                // Force High Quality Steps just for the render
+                this.renderer.render(this.scene, this.camera);
+                
+                // Capture frame to ImageBitmap (fastest way to store textures in RAM)
+                const bitmap = await createImageBitmap(this.renderer.domElement);
+                this.videoFrames.push(bitmap);
+                
+                if (i % 5 === 0) {
+                    const pct = Math.round((i / totalFrames) * 100);
+                    this.btnRenderVideo.textContent = `⏳ CALCULANDO FRAMES (${pct}%)...`;
+                    await new Promise(r => setTimeout(r, 1)); // Yield to browser
+                }
+            }
+            
+            this.btnRenderVideo.textContent = "✅ VÍDEO RENDERIZADO";
+            this.btnRenderVideo.style.background = "linear-gradient(135deg, #00f5d4, #0077ff)";
+            this.isRenderingVideo = false;
+            
+            // Switch UI to Video Player
+            this.container.style.display = "none";
+            this.videoContainer.style.display = "block";
+            
+            // Create or get canvas for playback
+            let playCanvas = document.getElementById("sn-playback-canvas");
+            if (!playCanvas) {
+                playCanvas = document.createElement("canvas");
+                playCanvas.id = "sn-playback-canvas";
+                playCanvas.width = this.renderer.domElement.width;
+                playCanvas.height = this.renderer.domElement.height;
+                playCanvas.style.width = "100%";
+                playCanvas.style.borderRadius = "8px";
+                playCanvas.style.border = "1px solid rgba(255,255,255,0.2)";
+                
+                // Replace the <video> tag from HTML with our Canvas player
+                const videoTag = document.getElementById("sn-video-player");
+                if(videoTag) videoTag.replaceWith(playCanvas);
+            }
+            
+            const ctx = playCanvas.getContext("2d");
+            let frameIdx = 0;
+            
+            if (this.videoInterval) clearInterval(this.videoInterval);
+            this.videoInterval = setInterval(() => {
+                if (this.videoFrames.length > 0) {
+                    ctx.clearRect(0, 0, playCanvas.width, playCanvas.height);
+                    ctx.drawImage(this.videoFrames[frameIdx], 0, 0);
+                    frameIdx = (frameIdx + 1) % this.videoFrames.length;
+                }
+            }, 1000 / 60); // Playback smoothly at 60 FPS
+            
         });
     }
 
