@@ -114,7 +114,7 @@ class BlackHoleSimulation {
             uniform vec3  u_cam_right;
             uniform float u_fov_scale;
 
-            #define RS 1.0 // Scale-invariant Schwarzschild Radius
+            #define RS 1.0
 
             // ──────────────────────────────────────────────────────────────
             //  NOISE / FBM
@@ -140,23 +140,25 @@ class BlackHoleSimulation {
             }
 
             // ──────────────────────────────────────────────────────────────
-            //  STARFIELD (Background)
+            //  STARFIELD (Interstellar Quality)
             // ──────────────────────────────────────────────────────────────
             vec3 starfield(vec3 ray) {
                 vec3 d = abs(ray);
-                vec2 uv; float face;
-                if (d.x >= d.y && d.x >= d.z) { uv = ray.yz/d.x; face = ray.x>0.0?0.0:1.0; } 
-                else if (d.y >= d.z) { uv = ray.xz/d.y; face = ray.y>0.0?2.0:3.0; } 
-                else { uv = ray.xy/d.z; face = ray.z>0.0?4.0:5.0; }
-                uv = uv*0.5+0.5;
                 
-                float n = noise(ray * 250.0);
-                float stars = pow(n, 35.0) * 5.0;
+                // Milky way band effect
+                float galactic_plane = exp(-abs(ray.y) * 8.0);
+                float dust = fbm(ray * 5.0) * galactic_plane;
+                vec3 bg_color = mix(vec3(0.0), vec3(0.05, 0.03, 0.08), dust);
                 
-                float bg_neb = fbm(ray * 4.0) * 0.05;
-                vec3 bg_color = mix(vec3(0.01,0.02,0.04), vec3(0.04,0.02,0.05), ray.y*0.5+0.5);
+                // Crisp stars (less noise, more distinct points)
+                float n1 = noise(ray * 300.0);
+                float stars1 = pow(n1, 60.0) * 15.0 * (1.0 + galactic_plane * 2.0);
                 
-                return vec3(stars) + bg_color * bg_neb;
+                float n2 = noise(ray * 150.0 + 10.0);
+                vec3 star_color = mix(vec3(1.0, 0.8, 0.6), vec3(0.6, 0.8, 1.0), noise(ray*50.0));
+                vec3 stars = star_color * (stars1 + pow(n2, 80.0) * 20.0);
+                
+                return stars + bg_color;
             }
 
             // ──────────────────────────────────────────────────────────────
@@ -174,15 +176,15 @@ class BlackHoleSimulation {
                 vec3 accumulated_color = vec3(0.0);
                 float transmit = 1.0;
                 
-                // Dynamic bounding volume for rendering based on camera distance
-                float escapeR = max(30.0, length(ro) * 1.5);
+                // Adaptive escape radius to prevent disk clipping
+                float escapeR = max(50.0, length(ro) * 1.5);
                 
                 // Physics constants
-                float ISCO = (u_bh_type > 0.5) ? RS * (3.0 - 2.0*u_spin) : RS * 3.0; // Innermost Stable Circular Orbit
-                float DISK_OUTER = RS * 12.0;
+                float ISCO = (u_bh_type > 0.5) ? RS * (3.0 - 2.0*u_spin) : RS * 3.0;
+                float DISK_OUTER = RS * 15.0;
 
-                // High-precision adaptive raymarching
-                const int MAX_STEPS = 160;
+                const int MAX_STEPS = 250;
+                
                 for (int i = 0; i < MAX_STEPS; i++) {
                     float r2 = dot(ray_pos, ray_pos);
                     float r = sqrt(r2);
@@ -194,139 +196,155 @@ class BlackHoleSimulation {
                         float a = u_spin * rg;
                         horizon = rg + sqrt(max(0.0, rg*rg - a*a));
                     }
-                    if (r < horizon) {
-                        // Absorbed by Black Hole
+                    if (r < horizon * 1.02) { // Absorb slightly above horizon to hide singularity math errors
                         transmit = 0.0;
                         break;
                     }
 
                     if (r > escapeR) break;
 
-                    // Adaptive step size: Very small near BH for accurate geodesics, larger far away.
-                    float dt = clamp(r * 0.015, 0.005, 0.2);
+                    // Adaptive step size: Very fine near BH, fast in empty space
+                    float dt = clamp(r * 0.03, 0.005, 1.5);
 
-                    // B. Lensing (Gravity)
+                    // B. Geodesic Lensing (Robust Integration)
                     if (u_lensing_enabled > 0.5) {
-                        // Geodesic equation acceleration: a = -1.5 * RS * (L^2) * r_vec / r^5
-                        vec3 L = cross(ray_pos, ray_dir);
-                        vec3 accel = -1.5 * RS * dot(L, L) * ray_pos / (r2 * r2 * r);
+                        // h = angular momentum per unit mass
+                        vec3 h_vec = cross(ray_pos, ray_dir);
+                        float h2 = dot(h_vec, h_vec);
                         
-                        // Frame dragging for Kerr
+                        // Acceleration due to gravity: a = -1.5 * RS * h^2 * r_vec / r^5
+                        vec3 accel = -1.5 * RS * h2 * ray_pos / (r2 * r2 * r);
+                        
+                        // Frame dragging (simplified Lense-Thirring)
                         if (u_bh_type > 0.5) {
                             vec3 spin_axis = vec3(0.0, 0.0, 1.0);
                             vec3 frame_drag = cross(spin_axis, ray_pos) * (u_spin * RS * 2.0 / (r2*r2));
                             accel += frame_drag;
                         }
                         
+                        // Prevent dt from being too large if acceleration is high
+                        float accel_mag = length(accel);
+                        if (accel_mag * dt > 0.1) {
+                            dt = 0.1 / accel_mag;
+                        }
+                        
                         ray_dir += accel * dt;
                         ray_dir = normalize(ray_dir);
                     }
                     
-                    // C. Volumetric Accretion Disk
+                    // C. Accretion Disk (Interstellar Gargantua Style)
                     if (u_accretion_rate > 0.0 && r > ISCO && r < DISK_OUTER) {
-                        // Thick disk torus shape
-                        float disk_thickness = r * 0.08; // flares outward slightly
                         float dist_to_plane = abs(ray_pos.z);
                         
-                        if (dist_to_plane < disk_thickness) {
-                            // Normalized coords
+                        // Razor-thin disk profile flaring slightly
+                        float disk_thickness = r * 0.03 + 0.01; 
+                        
+                        if (dist_to_plane < disk_thickness * 3.0) {
                             float norm_r = (r - ISCO) / (DISK_OUTER - ISCO);
-                            float vertical_density = 1.0 - (dist_to_plane / disk_thickness);
                             
-                            // Radial density profile (peaks near ISCO, fades out)
-                            float radial_density = smoothstep(0.0, 0.1, norm_r) * (1.0 - smoothstep(0.5, 1.0, norm_r));
+                            // Vertical falloff (exponential for sharp midplane)
+                            float vertical_density = exp(-abs(dist_to_plane) / disk_thickness * 4.0);
+                            
+                            // Radial density (Peaks intensely near ISCO)
+                            float radial_density = pow(1.0 - norm_r, 2.0) * smoothstep(0.0, 0.05, norm_r);
                             float base_density = vertical_density * radial_density;
                             
-                            if (base_density > 0.01) {
-                                // Keplerian velocity field (v ~ 1/sqrt(r))
-                                float v_orbital = 2.0 / sqrt(r); 
+                            if (base_density > 0.005) {
+                                float v_orbital = 1.0 / sqrt(2.0 * r - RS); // Relativistic Keplerian approx
                                 float angle = atan(ray_pos.y, ray_pos.x);
                                 float time_offset = angle - u_time * v_orbital;
                                 
-                                // FBM Noise for gas turbulence
-                                vec3 noise_pos = vec3(r * 2.0, time_offset * 3.0, ray_pos.z * 5.0);
+                                // High-detail gas turbulence and structured rings
+                                vec3 noise_pos = vec3(r * 4.0, time_offset * 4.0, ray_pos.z * 10.0);
                                 float gas = fbm(noise_pos);
-                                gas = pow(gas, 2.0) * 2.0; // Sharpen clumps
                                 
-                                float final_density = base_density * gas * u_accretion_rate * 1.5;
+                                // Radial sine rings to create structured plasma bands
+                                float rings = 0.6 + 0.4 * sin(r * 35.0 - u_time * 3.0);
+                                float micro_rings = 0.8 + 0.2 * sin(r * 120.0);
                                 
-                                // Doppler Effect Calculation
+                                gas = pow(gas, 1.2) * rings * micro_rings * 1.8;
+                                
+                                float final_density = base_density * gas * u_accretion_rate * 3.0;
+                                
+                                // Relativistic Doppler Beaming
                                 float doppler_factor = 1.0;
                                 if (u_doppler_enabled > 0.5) {
-                                    // Tangent vector to the circular orbit
                                     vec3 tangent = normalize(vec3(-ray_pos.y, ray_pos.x, 0.0));
-                                    // Dot product of ray direction and gas velocity
                                     float align = dot(ray_dir, tangent); 
-                                    // Shift is proportional to velocity
-                                    doppler_factor = 1.0 + (align * v_orbital * 1.2);
+                                    // Beaming formula approx: D^3 or D^4. 
+                                    doppler_factor = 1.0 + (align * v_orbital * 1.5);
+                                    doppler_factor = max(0.1, doppler_factor);
                                 }
                                 
-                                // Interstellar-like Base Color Profile (Hot inner, cooler outer)
-                                vec3 base_col = mix(vec3(1.0, 0.9, 0.7), vec3(1.0, 0.4, 0.1), norm_r);
+                                // Interstellar colors (Fiery orange/yellow near edge, brilliant white-blue near ISCO)
+                                vec3 base_col = mix(vec3(1.0, 0.8, 0.4), vec3(1.0, 0.95, 0.9), smoothstep(0.5, 0.0, norm_r));
                                 
                                 // Apply Doppler shift to color
                                 vec3 doppler_col = base_col;
                                 if (u_doppler_enabled > 0.5) {
-                                    // Blue shift
                                     if (doppler_factor > 1.0) {
-                                        doppler_col = mix(base_col, vec3(0.5, 0.8, 1.0), min(1.0, doppler_factor - 1.0));
-                                    } 
-                                    // Red shift
-                                    else {
-                                        doppler_col = mix(vec3(0.8, 0.1, 0.0), base_col, max(0.0, doppler_factor));
+                                        doppler_col = mix(base_col, vec3(0.5, 0.8, 1.0), min(1.0, (doppler_factor - 1.0)*0.8));
+                                    } else {
+                                        doppler_col = mix(vec3(0.8, 0.2, 0.0), base_col, doppler_factor);
                                     }
                                 }
                                 
-                                // Intensity boosting from Doppler beaming
-                                float intensity = pow(doppler_factor, 3.0) * final_density;
+                                // Beaming amplifies intensity dramatically
+                                float intensity = pow(doppler_factor, 3.0) * final_density * 5.0;
+                                
+                                // Photon ring glow enhancement
+                                float photon_ring = smoothstep(RS * 1.8, RS * 1.5, r) * 2.0;
+                                intensity += photon_ring * final_density;
                                 
                                 vec3 glow = doppler_col * intensity;
                                 
-                                accumulated_color += glow * transmit * dt * 8.0;
-                                transmit *= exp(-final_density * dt * 5.0);
+                                accumulated_color += glow * transmit * dt;
+                                transmit *= exp(-final_density * dt * 2.0);
                             }
                         }
                     }
 
                     // D. Quasar Jets (Volumetric)
                     if (u_bh_type > 1.5) {
-                        float d_axis = length(ray_pos.xy); // distance from Z axis
-                        float jet_radius = RS * 0.3 + abs(ray_pos.z) * 0.1;
+                        float d_axis = length(ray_pos.xy);
+                        float jet_radius = RS * 0.2 + abs(ray_pos.z) * 0.15;
                         
-                        if (d_axis < jet_radius && abs(ray_pos.z) > RS) {
+                        if (d_axis < jet_radius && abs(ray_pos.z) > RS * 1.2) {
                             float profile = smoothstep(jet_radius, 0.0, d_axis);
-                            float z_decay = exp(-abs(ray_pos.z) * 0.08);
+                            float z_decay = exp(-abs(ray_pos.z) * 0.05);
+                            float jet_gas = fbm(vec3(ray_pos.xy * 8.0, ray_pos.z * 0.5 - u_time * 15.0));
+                            float jet_density = profile * z_decay * jet_gas * u_accretion_rate * 2.0;
                             
-                            float jet_gas = fbm(vec3(ray_pos.xy * 5.0, ray_pos.z - u_time * 8.0));
-                            float jet_density = profile * z_decay * jet_gas * u_accretion_rate;
-                            
-                            vec3 jet_col = mix(vec3(0.4, 0.0, 1.0), vec3(0.0, 0.8, 1.0), jet_gas);
-                            
-                            accumulated_color += jet_col * jet_density * transmit * dt * 5.0;
-                            transmit *= exp(-jet_density * dt * 2.0);
+                            vec3 jet_col = mix(vec3(0.4, 0.0, 1.0), vec3(0.8, 0.9, 1.0), jet_gas);
+                            accumulated_color += jet_col * jet_density * transmit * dt * 3.0;
+                            transmit *= exp(-jet_density * dt * 1.5);
                         }
                     }
 
                     ray_pos += ray_dir * dt;
-                    if (transmit < 0.01) break; // Fully occluded
+                    if (transmit < 0.01) break;
                     
-                    // Fix deleting bubble: If ray gets trapped and exhausts all steps, it's absorbed
-                    if (i == 159) transmit = 0.0; 
+                    // Prevent deleting bubble by smoothly terminating if trapped
+                    if (i == MAX_STEPS - 1) transmit = 0.0;
                 }
                 
-                // Add background if light escaped
+                // Add starfield background
                 if (transmit > 0.01) {
                     accumulated_color += starfield(ray_dir) * transmit;
                 }
                 
-                // ACES Tonemapping for photorealism
-                vec3 final_color = accumulated_color;
-                final_color = final_color * (2.51 * final_color + 0.03) / (final_color * (2.43 * final_color + 0.59) + 0.14);
-                final_color = clamp(final_color, 0.0, 1.0);
+                // Photorealistic ACES Tonemapping
+                vec3 color = accumulated_color;
+                color = (color * (2.51 * color + 0.03)) / (color * (2.43 * color + 0.59) + 0.14);
+                color = clamp(color, 0.0, 1.0);
+                
+                // Extra bloom pop
+                color += accumulated_color * 0.1;
+                
                 // Gamma correct
-                final_color = pow(final_color, vec3(1.0/2.2));
+                color = pow(clamp(color, 0.0, 1.0), vec3(1.0 / 2.2));
 
-                gl_FragColor = vec4(final_color, 1.0);
+                gl_FragColor = vec4(color, 1.0);
             }
         `;
 
@@ -346,23 +364,29 @@ class BlackHoleSimulation {
 
     bindEvents() {
         const sync = () => {
-            this.mass = parseFloat(this.sliderMass.value);
+            const expMass = parseFloat(this.sliderMass.value);
+            this.mass = Math.pow(10, expMass);
             this.accretionRate = parseFloat(this.sliderAcc.value);
             this.updatePhysics();
             
             // Format numbers nicely
             if (this.mass >= 1e9) {
-                this.numMass.textContent = (this.mass / 1e9).toFixed(1) + " Bilhões";
+                this.numMass.textContent = (this.mass / 1e9).toFixed(2) + " Bilhões";
             } else if (this.mass >= 1e6) {
-                this.numMass.textContent = (this.mass / 1e6).toFixed(1) + " Milhões";
+                this.numMass.textContent = (this.mass / 1e6).toFixed(2) + " Milhões";
+            } else if (this.mass >= 1e3) {
+                this.numMass.textContent = (this.mass / 1e3).toFixed(2) + " Mil";
             } else {
-                this.numMass.textContent = this.mass;
+                this.numMass.textContent = this.mass.toFixed(2);
             }
-            this.numAcc.textContent = this.accretionRate;
+            this.numAcc.textContent = this.accretionRate.toFixed(2);
         };
 
         this.sliderMass.addEventListener("input", sync);
         this.sliderAcc.addEventListener("input", sync);
+        
+        const spinSlider = document.getElementById("slider-b-spin");
+        if (spinSlider) spinSlider.addEventListener("input", sync);
 
         const checkToggles = () => {
             this.uniforms.u_doppler_enabled.value = this.toggleDoppler.checked ? 1.0 : 0.0;

@@ -166,13 +166,8 @@ class StellarSimulation {
             }
         });
 
-        this.btnEvolve.addEventListener("click", () => {
-            this.triggerDeathSequence();
-        });
-
-        this.btnReset.addEventListener("click", () => {
-            this.resetSimulation();
-        });
+        this.btnEvolve.style.display = 'none'; // Hidden until Supernova module
+        this.btnReset.style.display = 'none';
 
         // Close the notification overlay without resetting automatically
         this.btnAlertClose.addEventListener("click", () => {
@@ -188,7 +183,7 @@ class StellarSimulation {
             this.sliderTemp.disabled = false;
             this.numMass.disabled = false;
             this.numTemp.disabled = false;
-            this.btnEvolve.style.display = 'block';
+            this.btnEvolve.style.display = 'none';
             this.inputSearch.value = "";
             this.searchSuggestions.style.display = 'none';
             
@@ -716,30 +711,39 @@ class StellarSimulation {
 
         // Click and drag handling on HR Diagram
         const handleHRClick = (e) => {
-            if (this.deathSequenceActive) return;
             const rect = this.hrCanvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
             
-            // Map click back to Temp and Lum
-            // Temp (x axis) goes from 40,000K (left) to 2,000K (right) - Logarithmic scale
             const xPct = x / rect.width;
-            const logTempMin = Math.log10(2000);
-            const logTempMax = Math.log10(40000);
-            const logTemp = logTempMax - xPct * (logTempMax - logTempMin);
-            this.temp = Math.round(Math.pow(10, logTemp));
+            const yPct = y / rect.height;
             
-            // Bound inside slider values
-            this.temp = Math.max(2000, Math.min(this.temp, 40000));
+            if (xPct > 0.6 && yPct < 0.35) {
+                // Supergiant Region
+                this.temp = 3500 + Math.random() * 2000;
+                this.mass = 20.0 + Math.random() * 5.0; 
+                this.lum = Math.pow(this.mass, 3.5) * 50.0;
+            } else if (xPct < 0.4 && yPct > 0.7) {
+                // White Dwarf Region
+                this.temp = 10000 + Math.random() * 15000;
+                this.mass = 0.6 + Math.random() * 0.6;
+                this.lum = 0.001;
+            } else {
+                // Main Sequence mapping
+                const logTempMin = Math.log10(2000);
+                const logTempMax = Math.log10(40000);
+                const logTemp = logTempMax - xPct * (logTempMax - logTempMin);
+                this.temp = Math.round(Math.pow(10, logTemp));
+                this.temp = Math.max(2000, Math.min(this.temp, 40000));
+                
+                const tRatio = this.temp / 5778;
+                this.mass = Math.pow(tRatio, 1.8);
+                this.mass = Math.max(0.1, Math.min(this.mass, 25));
+                this.lum = Math.pow(this.mass, 3.5);
+            }
+            
             this.sliderTemp.value = this.temp;
             this.numTemp.value = this.temp;
-            
-            // Map Mass and Luminosity along the Main Sequence
-            const tRatio = this.temp / 5778;
-            this.mass = Math.pow(tRatio, 1.8);
-            this.mass = Math.max(0.1, Math.min(this.mass, 25));
-            this.lum = Math.pow(this.mass, 3.5);
-            
             this.sliderMass.value = this.mass.toFixed(1);
             this.numMass.value = this.mass.toFixed(1);
 
@@ -1148,67 +1152,7 @@ class StellarSimulation {
         return 0x1e90ff;                            // Class O: Deep Blue
     }
 
-    // Stellar Evolution Death Sequences
-    triggerDeathSequence() {
-        if (this.deathSequenceActive) return;
-        this.deathSequenceActive = true;
-        this.state = 'evolving';
-        this.deathTimer = 0;
-
-        // Block UI sliders and numeric inputs
-        this.sliderMass.disabled = true;
-        this.sliderTemp.disabled = true;
-        this.numMass.disabled = true;
-        this.numTemp.disabled = true;
-
-        // Toggle buttons visibility
-        this.btnEvolve.style.display = 'none';
-        this.btnReset.style.display = 'none';
-
-        // Select proper physical route based on core mass threshold
-        if (this.mass < 8.0) {
-            this.deathType = 'white_dwarf';
-        } else {
-            this.deathType = 'supernova';
-        }
-    }
-
-    resetSimulation() {
-        this.state = 'main_sequence';
-        this.deathSequenceActive = false;
-        
-        // Reset scale and colors
-        this.starMesh.visible = true;
-        this.coronaMesh.visible = true;
-        this.particles.material.opacity = 0;
-        
-        // Restore controls visibility and state
-        this.sliderMass.disabled = false;
-        this.sliderTemp.disabled = false;
-        this.numMass.disabled = false;
-        this.numTemp.disabled = false;
-        
-        this.btnEvolve.style.display = 'block';
-        this.btnReset.style.display = 'none';
-
-        // Reapply internal transparency toggling state
-        if (this.showInternal) {
-            this.starMat.transparent = true;
-            this.starMat.opacity = 0.18;
-            this.coronaMat.transparent = true;
-            this.coronaMat.opacity = 0.15;
-            this.internalLayersGroup.visible = true;
-        } else {
-            this.starMat.transparent = false;
-            this.starMat.opacity = 1.0;
-            this.coronaMat.transparent = true;
-            this.coronaMat.opacity = 0.35;
-            this.internalLayersGroup.visible = false;
-        }
-        
-        // Recompute physics
-        this.updateStellarPhysics();
-    }
+    // Stellar evolution (Death sequences moved to separate module)
 
     resize() {
         if (!this.container) return;
@@ -1322,21 +1266,10 @@ class StellarSimulation {
         // Draw the HR Diagram at 30 FPS or when active
         this.drawHRDiagram();
 
-        // 1. ANIMATE THE EVOLUTIONARY STAGES (DEATH SEQUENCES)
-        if (this.deathSequenceActive) {
-            this.deathTimer += 0.01;
-
-            if (this.deathType === 'white_dwarf') {
-                this.animateWhiteDwarfSequence();
-            } else if (this.deathType === 'supernova') {
-                this.animateSupernovaSequence();
-            }
-        } else {
-            // Gentle pulse on main sequence
-            if (this.state === 'main_sequence') {
-                const scalePulse = 1.0 + Math.sin(performance.now() * 0.002) * 0.015;
-                this.coronaMesh.scale.copy(this.starMesh.scale).multiplyScalar(1.05 * scalePulse);
-            }
+        // Gentle pulse on main sequence
+        if (this.state === 'main_sequence') {
+            const scalePulse = 1.0 + Math.sin(performance.now() * 0.002) * 0.015;
+            this.coronaMesh.scale.copy(this.starMesh.scale).multiplyScalar(1.05 * scalePulse);
         }
 
         this.renderer.render(this.scene, this.camera);
@@ -1490,213 +1423,6 @@ class StellarSimulation {
         this.radiativeMesh.scale.setScalar(radScale);
     }
 
-    // A: Low-mass evolutionary animation sequence
-    animateWhiteDwarfSequence() {
-        // Step 1: Red Giant Expansion (Timer 0.0 -> 3.0)
-        if (this.deathTimer < 3.0) {
-            const progress = this.deathTimer / 3.0;
-            const targetRadius = Math.max(2.5, this.radius * 3.5);
-            const currentRadius = this.radius + (targetRadius - this.radius) * progress;
-            const visualScale = currentRadius * 0.5;
-            
-            this.starMesh.scale.setScalar(visualScale);
-            this.coronaMesh.scale.setScalar(visualScale * 1.08);
-
-            // Shift color to red-giant reddish spectrum
-            this.starMat.color.setHex(0xff3300);
-            this.coronaMat.color.setHex(0xff3300);
-            this.starLight.color.setHex(0xff3300);
-            this.starLight.intensity = 1.0 + progress * 2.0;
-
-            this.metricRadius.textContent = currentRadius.toFixed(2) + " R⊙ (Gigante Vermelha)";
-        }
-        // Step 2: Nebula envelope ejection (Timer 3.0 -> 6.0)
-        else if (this.deathTimer < 6.0) {
-            const progress = (this.deathTimer - 3.0) / 3.0;
-            this.state = 'nebula';
-
-            // Ejection particle cloud expands
-            this.particles.material.opacity = progress * 0.5;
-            this.particles.material.color.setHex(0xff5500);
-            
-            const positions = this.particles.geometry.attributes.position.array;
-            for (let i = 0; i < this.particleCount; i++) {
-                // Expand particles radially
-                const vel = this.particleVelocities[i];
-                positions[i*3] += vel.x * 0.03;
-                positions[i*3+1] += vel.y * 0.03;
-                positions[i*3+2] += vel.z * 0.03;
-            }
-            this.particles.geometry.attributes.position.needsUpdate = true;
-
-            // Shrink the core rapidly to a white dwarf core
-            const currentScale = (this.radius * 3.5 * 0.5) * (1.0 - progress) + 0.15 * progress;
-            this.starMesh.scale.setScalar(currentScale);
-            this.starMat.color.setHex(0xe0ffff); // shift to blue-white degenerate color
-
-            this.coronaMesh.material.opacity = (1.0 - progress) * 0.35;
-            this.metricRadius.textContent = "Ejetando Envelope Estelar...";
-        }
-        // Step 3: White Dwarf Core (Timer 6.0+)
-        else {
-            this.state = 'white_dwarf';
-            this.starMesh.scale.setScalar(0.08); // Earth sized core
-            this.starMat.color.setHex(0xffffff);
-            this.starLight.color.setHex(0xffffff);
-            this.starLight.intensity = 0.5;
-            this.coronaMesh.visible = false;
-            
-            // Nebula fades
-            this.particles.material.opacity = Math.max(0, 0.5 - (this.deathTimer - 6.0) * 0.05);
-
-            this.metricRadius.textContent = "0.01 R⊙ (Anã Branca)";
-            this.metricTc.textContent = "0.0 K (Exausto)";
-            this.metricPres.textContent = "Pressão Degenerada Eletrônica";
-            this.metricTime.textContent = "Resfriamento Eterno";
-
-            // Trigger HUD completion notice
-            if (this.deathTimer > 7.5) {
-                this.alertTitle.textContent = "ANÃ BRANCA CRIADA!";
-                this.alertTitle.className = "alert-title collapse";
-                this.alertDesc.textContent = `A estrela de baixa massa (${this.mass.toFixed(1)} M⊙) concluiu a queima do hélio. Suas camadas externas foram dispersas como uma bela Nebula Planetária. O núcleo contraiu-se para uma Anã Branca sustentada pela Pressão de Degenerescência Eletrônica, resfriando-se lentamente pela eternidade.`;
-                this.alertModal.classList.add("active");
-                this.deathSequenceActive = false;
-
-                // Habilita o botão manual para reiniciar o ciclo
-                this.btnReset.style.display = 'block';
-            }
-        }
-    }
-
-    // B: High-mass explosive sequence (Supernova)
-    animateSupernovaSequence() {
-        // Step 1: Nuclear Core collapse (Timer 0.0 -> 1.5)
-        if (this.deathTimer < 1.5) {
-            this.state = 'collapsing';
-            const progress = this.deathTimer / 1.5;
-            
-            // Dramatic Camera Zoom In for the implosion
-            this.camera.fov = 40 - (progress * 15); // Zoom from 40 to 25
-            this.camera.updateProjectionMatrix();
-
-            // Fast shrink contraction representing core collapse
-            const shrink = 1.0 - progress * 0.85; // Shrinks to 15%
-            this.starMesh.scale.setScalar(this.radius * 0.7 * shrink);
-            this.coronaMesh.scale.setScalar(this.radius * 0.75 * shrink);
-
-            // Flicker warning orange/red core -> transitioning to white hot implosion
-            const rCol = Math.min(255, 255 + progress * 200);
-            const gbCol = Math.min(255, 34 + progress * 220);
-            this.starMat.uniforms.u_color.value.setRGB(rCol/255, gbCol/255, gbCol/255);
-            this.coronaMat.color.setRGB(rCol/255, gbCol/255, gbCol/255);
-            
-            this.starLight.intensity = 5.0 * (1.0 + Math.sin(this.deathTimer * 80) * 2.0);
-
-            this.metricRadius.textContent = "Colapso do Núcleo de Ferro!";
-        }
-        // Step 2: Supernova Outburst Flash (Timer 1.5 -> 3.5)
-        else if (this.deathTimer < 3.5) {
-            this.state = 'explosion';
-            const progress = (this.deathTimer - 1.5) / 2.0;
-
-            // Camera shakes and zooms out wildly
-            this.camera.fov = 25 + (progress * 35); // Zoom out to 60
-            this.camera.position.x = (Math.random() - 0.5) * 0.5 * (1.0 - progress);
-            this.camera.position.y = (Math.random() - 0.5) * 0.5 * (1.0 - progress);
-            this.camera.updateProjectionMatrix();
-
-            // Blind Flash: Overexposure effect using massive white/blue geometry
-            if (progress < 0.15) {
-                this.coronaMesh.scale.setScalar(this.radius * (1.0 + progress * 150.0));
-                this.coronaMat.color.setHex(0xffffff);
-                this.coronaMat.opacity = 1.0;
-                this.starLight.intensity = 500.0; // Overwhelming light
-            } else {
-                // Flash fades and expanding shockwave takes over
-                this.coronaMesh.scale.setScalar(this.radius * (20.0 + progress * 40.0));
-                this.coronaMat.color.setHex(0x00d2ff); // shifts to blue/cyan energy
-                this.coronaMat.opacity = (1.0 - progress) * 0.9;
-                this.starLight.intensity = 150.0 * (1.0 - progress);
-            }
-            this.starMesh.visible = false;
-            this.coronaMesh.visible = true;
-            this.coronaMat.blending = THREE.AdditiveBlending;
-
-            // Activate and expand particles massively at high speeds
-            this.particles.material.opacity = (1.0 - progress) * 2.0;
-            this.particles.material.size = 0.15 + progress * 0.3; // Much larger debris
-            this.particles.material.color.setHex(0xffaa00);
-
-            const positions = this.particles.geometry.attributes.position.array;
-            for (let i = 0; i < this.particleCount; i++) {
-                const vel = this.particleVelocities[i];
-                // Drag effect: particles slow down as they expand
-                const drag = Math.max(0.1, 1.0 - progress);
-                positions[i*3] += vel.x * 0.35 * drag;
-                positions[i*3+1] += vel.y * 0.35 * drag;
-                positions[i*3+2] += vel.z * 0.35 * drag;
-            }
-            this.particles.geometry.attributes.position.needsUpdate = true;
-
-            this.metricRadius.textContent = "Explosão de Supernova!!";
-        }
-        // Step 3: Core Remanent (Timer 3.5+)
-        else {
-            this.state = 'remanent';
-            this.coronaMesh.visible = false;
-            this.particles.material.opacity = Math.max(0, 1.0 - (this.deathTimer - 1.5) * 0.2);
-
-            // Stabilize Camera
-            this.camera.fov = 40;
-            this.camera.position.x = 0;
-            this.camera.position.y = 0;
-            this.camera.updateProjectionMatrix();
-
-            // Remanent object depends on original mass
-            if (this.mass < 15.0) {
-                // Neutron Star (Tiny pulsar pulsing with dynamic scale)
-                this.starMesh.visible = true;
-                const pPulse = 0.04 + Math.sin(performance.now() * 0.5) * 0.015;
-                this.starMesh.scale.setScalar(pPulse);
-                
-                // Shader needs to respond
-                this.starMat.uniforms.u_color.value.setHex(0x00ffff);
-                this.starLight.intensity = 2.0;
-                this.starLight.color.setHex(0x00ffff);
-                
-                this.metricRadius.textContent = "15 km (Estrela de Nêutrons)";
-                this.metricPres.textContent = "Pressão Degenerada de Nêutrons";
-            } else {
-                // Black hole (Completely black, invisible, distorts space but no shader for that here)
-                this.starMesh.visible = false;
-                this.starLight.intensity = 0.0;
-                this.metricRadius.textContent = "0.0 km (Buraco Negro)";
-                this.metricPres.textContent = "Singularidade!";
-            }
-            
-            this.metricTc.textContent = "Extremo";
-            this.metricTime.textContent = "---";
-
-            if (this.deathTimer > 5.0) {
-                const isBH = this.mass >= 15.0;
-                this.alertTitle.textContent = isBH ? "BURACO NEGRO DE SINGULARIDADE!" : "ESTRELA DE NÊUTRONS CRIADA!";
-                this.alertTitle.className = isBH ? "alert-title collapse" : "alert-title supernova";
-                this.alertDesc.textContent = `A estrela massiva (${this.mass.toFixed(1)} M⊙) exauriu sua queima. O colapso gravitacional implodiu o núcleo instantaneamente, liberando uma energia equivalente a ${isBH ? "um buraco negro estelar" : "uma estrela de nêutrons"} como remanescente denso no centro da nebulosa expansiva.`;
-                this.alertModal.classList.add("active");
-                this.deathSequenceActive = false;
-
-                // Habilita o botão manual para reiniciar o ciclo
-                this.btnReset.style.display = 'block';
-                
-                // Reset positions for particles for future run
-                const positions = this.particles.geometry.attributes.position.array;
-                for (let i = 0; i < this.particleCount * 3; i++) {
-                    positions[i] = 0;
-                }
-                this.particles.geometry.attributes.position.needsUpdate = true;
-            }
-        }
-    }
 }
 
 // Instantiate
