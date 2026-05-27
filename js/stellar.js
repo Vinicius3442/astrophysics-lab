@@ -334,7 +334,7 @@ class StellarSimulation {
         // Star 3D Geometry (highly detailed)
         this.starGeo = new THREE.SphereGeometry(1.0, 64, 64);
         
-        // Custom Shader Material for realistic bubbling plasma surface
+        // Custom Shader Material for realistic bubbling plasma surface and HDR Bloom
         this.starMat = new THREE.ShaderMaterial({
             uniforms: {
                 u_time: { value: 0.0 },
@@ -346,12 +346,72 @@ class StellarSimulation {
             side: THREE.FrontSide,
             opacity: 1.0,
             vertexShader: `
+                uniform float u_time;
                 varying vec3 vNormal;
                 varying vec3 vPosition;
+                varying float vNoise;
+                
+                // Fast 3D Noise for Vertex Displacement
+                vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+                vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+                float snoise(vec3 v) { 
+                    const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+                    const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+                    vec3 i  = floor(v + dot(v, C.yyy) );
+                    vec3 x0 = v - i + dot(i, C.xxx) ;
+                    vec3 g = step(x0.yzx, x0.xyz);
+                    vec3 l = 1.0 - g;
+                    vec3 i1 = min( g.xyz, l.zxy );
+                    vec3 i2 = max( g.xyz, l.zxy );
+                    vec3 x1 = x0 - i1 + C.xxx;
+                    vec3 x2 = x0 - i2 + C.yyy;
+                    vec3 x3 = x0 - D.yyy;
+                    i = mod289(i); 
+                    vec4 p = permute( permute( permute( 
+                               i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                             + i.y + vec4(0.0, i1.y, i2.y, 1.0 )) 
+                             + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+                    float n_ = 0.142857142857;
+                    vec3  ns = n_ * D.wyz - D.xzx;
+                    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+                    vec4 x_ = floor(j * ns.z);
+                    vec4 y_ = floor(j - 7.0 * x_ );
+                    vec4 x = x_ *ns.x + ns.yyyy;
+                    vec4 y = y_ *ns.x + ns.yyyy;
+                    vec4 h = 1.0 - abs(x) - abs(y);
+                    vec4 b0 = vec4( x.xy, y.xy );
+                    vec4 b1 = vec4( x.zw, y.zw );
+                    vec4 s0 = floor(b0)*2.0 + 1.0;
+                    vec4 s1 = floor(b1)*2.0 + 1.0;
+                    vec4 sh = -step(h, vec4(0.0));
+                    vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+                    vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+                    vec3 p0 = vec3(a0.xy,h.x);
+                    vec3 p1 = vec3(a0.zw,h.y);
+                    vec3 p2 = vec3(a1.xy,h.z);
+                    vec3 p3 = vec3(a1.zw,h.w);
+                    vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+                    p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+                    vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+                    m = m * m;
+                    return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
+                }
+
                 void main() {
                     vNormal = normalize(normalMatrix * normal);
-                    vPosition = position;
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    
+                    // Vertex Displacement using 3D Noise for convective granulation
+                    float noiseVal = snoise(position * 3.5 + u_time * 0.15) * 0.03;
+                    noiseVal += snoise(position * 8.0 - u_time * 0.25) * 0.01;
+                    
+                    vNoise = noiseVal;
+                    
+                    vec3 displacedPos = position + normal * noiseVal;
+                    vPosition = displacedPos;
+                    
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(displacedPos, 1.0);
                 }
             `,
             fragmentShader: `
@@ -361,7 +421,9 @@ class StellarSimulation {
                 uniform float u_clip;
                 varying vec3 vNormal;
                 varying vec3 vPosition;
+                varying float vNoise;
 
+                // FBM for detailed surface plasma
                 float hash(vec3 p) {
                     p = fract(p * 0.3183099 + vec3(0.1));
                     p *= 17.0;
@@ -381,39 +443,53 @@ class StellarSimulation {
                     float v = 0.0;
                     float a = 0.5;
                     vec3 shift = vec3(100.0);
-                    for (int i = 0; i < 3; ++i) {
+                    for (int i = 0; i < 4; ++i) { // 4 octaves for rich detail
                         v += a * noise(p);
                         p = p * 2.0 + shift;
                         a *= 0.5;
                     }
                     return v;
                 }
+
                 void main() {
                     if (u_clip > 0.5 && vPosition.x > 0.0) {
-                        discard;
+                        discard; // Cross-section active
                     }
-                    vec3 coord = vPosition * 4.5;
-                    coord.y -= u_time * 0.38;
-                    coord.x += sin(u_time * 0.12) * 0.15;
+                    
+                    // Animated coordinates for boiling plasma
+                    vec3 coord = vPosition * 5.0;
+                    coord.y -= u_time * 0.4;
+                    coord.z += sin(u_time * 0.2) * 0.2;
                     
                     float n = fbm(coord);
                     
+                    // Thermal Color Palettes
                     vec3 baseColor = u_color;
-                    vec3 hotColor = mix(baseColor, vec3(1.0, 1.0, 0.95), 0.52);
-                    vec3 coolColor = mix(baseColor, vec3(0.25, 0.03, 0.0), 0.65);
+                    
+                    // Extremely hot core spots
+                    vec3 hotColor = mix(baseColor, vec3(1.0, 1.0, 1.0), 0.7);
+                    
+                    // Cool sunspots / darker convection sinks
+                    vec3 coolColor = mix(baseColor, vec3(0.1, 0.0, 0.0), 0.8);
                     
                     // Adjust cool color to deep blue if star is a blue/white O-B type
-                    if (u_color.b > 0.8 && u_color.r < 0.3) {
-                        coolColor = mix(baseColor, vec3(0.0, 0.05, 0.28), 0.65);
+                    if (u_color.b > 0.8 && u_color.r < 0.4) {
+                        coolColor = mix(baseColor, vec3(0.0, 0.05, 0.3), 0.8);
+                        hotColor = mix(baseColor, vec3(0.8, 0.9, 1.0), 0.7);
                     }
                     
+                    // Non-linear mapping to create stark contrast (granules)
+                    n = smoothstep(0.3, 0.8, n + vNoise * 2.0);
                     vec3 surfaceColor = mix(coolColor, hotColor, n);
                     
-                    // Fresnel edge glow
+                    // Fresnel edge glow (HDR Bloom Simulation)
                     float ndotv = dot(normalize(vNormal), vec3(0.0, 0.0, 1.0));
-                    float rim = pow(1.0 - max(0.0, ndotv), 2.8);
+                    float rim = pow(1.0 - max(0.0, ndotv), 1.8);
                     
-                    vec3 finalColor = surfaceColor + baseColor * rim * 0.95;
+                    vec3 finalColor = surfaceColor + baseColor * rim * 1.5;
+                    
+                    // High exposure tone mapping for brightness
+                    finalColor = finalColor * (2.51 * finalColor + 0.03) / (finalColor * (2.43 * finalColor + 0.59) + 0.14);
                     
                     gl_FragColor = vec4(finalColor, u_opacity);
                 }
@@ -469,13 +545,14 @@ class StellarSimulation {
         this.coreMesh = new THREE.Mesh(coreGeo, coreMat);
         this.internalLayersGroup.add(this.coreMesh);
 
-        // 2. Radiative Zone Shell
-        const radGeo = new THREE.SphereGeometry(0.65, 32, 32);
+        // 2. Radiative Zone Shell (Volumetric Glow)
+        const radGeo = new THREE.SphereGeometry(0.65, 64, 64);
         const radMat = new THREE.MeshBasicMaterial({
-            color: 0xff5500,
+            color: 0xff4400,
             transparent: true,
-            opacity: 0.18,
-            wireframe: true
+            opacity: 0.25,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
         });
         this.radiativeMesh = new THREE.Mesh(radGeo, radMat);
         this.internalLayersGroup.add(this.radiativeMesh);
@@ -560,12 +637,27 @@ class StellarSimulation {
         }
 
         this.convectionGeo.setAttribute('position', new THREE.BufferAttribute(this.convectionPositions, 3));
+        
+        // Create a circular gradient texture for soft glowing particles
+        const canvas = document.createElement('canvas');
+        canvas.width = 32; canvas.height = 32;
+        const ctx = canvas.getContext('2d');
+        const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+        grad.addColorStop(0, 'rgba(255,255,255,1)');
+        grad.addColorStop(0.2, 'rgba(255,200,0,1)');
+        grad.addColorStop(1, 'rgba(255,0,0,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0,0,32,32);
+        const tex = new THREE.CanvasTexture(canvas);
+        
         this.convectionMat = new THREE.PointsMaterial({
-            color: 0xffd700,
-            size: 0.03,
+            color: 0xffa500,
+            size: 0.08,
+            map: tex,
             transparent: true,
-            opacity: 0.6,
-            blending: THREE.AdditiveBlending
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
         });
         this.convectionParticles = new THREE.Points(this.convectionGeo, this.convectionMat);
         this.internalLayersGroup.add(this.convectionParticles);
@@ -690,9 +782,9 @@ class StellarSimulation {
 
         // 2. Draw Main Sequence Corridor Gradient
         const msGrad = ctx.createLinearGradient(0, 0, w, h);
-        msGrad.addColorStop(0, "rgba(0, 210, 255, 0.2)");   // Hot Blue
-        msGrad.addColorStop(0.5, "rgba(255, 215, 0, 0.15)"); // Solar Yellow
-        msGrad.addColorStop(1, "rgba(255, 42, 109, 0.2)");   // Cool Red
+        msGrad.addColorStop(0, "rgba(0, 210, 255, 0.25)");   // Hot Blue
+        msGrad.addColorStop(0.5, "rgba(255, 215, 0, 0.2)"); // Solar Yellow
+        msGrad.addColorStop(1, "rgba(255, 42, 109, 0.25)");   // Cool Red
 
         ctx.strokeStyle = msGrad;
         ctx.lineWidth = 18;
@@ -702,6 +794,29 @@ class StellarSimulation {
         ctx.moveTo(25, 25);
         ctx.quadraticCurveTo(w * 0.4, h * 0.5, w - 25, h - 25);
         ctx.stroke();
+
+        // Draw Supergiants / Red Giants Branch (Top Right)
+        const giantGrad = ctx.createLinearGradient(w/2, 0, w, 0);
+        giantGrad.addColorStop(0, "rgba(255, 180, 0, 0.15)");
+        giantGrad.addColorStop(1, "rgba(255, 60, 0, 0.25)");
+        ctx.fillStyle = giantGrad;
+        ctx.beginPath();
+        ctx.ellipse(w * 0.75, h * 0.2, w * 0.2, h * 0.15, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+        ctx.font = "8px Orbitron";
+        ctx.fillText("Supergigantes", w * 0.68, h * 0.2);
+
+        // Draw White Dwarfs Branch (Bottom Left)
+        const wdGrad = ctx.createLinearGradient(0, h, w/2, h);
+        wdGrad.addColorStop(0, "rgba(200, 240, 255, 0.3)");
+        wdGrad.addColorStop(1, "rgba(255, 255, 255, 0.1)");
+        ctx.fillStyle = wdGrad;
+        ctx.beginPath();
+        ctx.ellipse(w * 0.25, h * 0.85, w * 0.15, h * 0.1, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+        ctx.fillText("Anãs Brancas", w * 0.15, h * 0.86);
 
         // 3. Labels
         ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
@@ -1460,15 +1575,22 @@ class StellarSimulation {
             this.state = 'collapsing';
             const progress = this.deathTimer / 1.5;
             
+            // Dramatic Camera Zoom In for the implosion
+            this.camera.fov = 40 - (progress * 15); // Zoom from 40 to 25
+            this.camera.updateProjectionMatrix();
+
             // Fast shrink contraction representing core collapse
-            const shrink = 1.0 - progress * 0.6;
+            const shrink = 1.0 - progress * 0.85; // Shrinks to 15%
             this.starMesh.scale.setScalar(this.radius * 0.7 * shrink);
             this.coronaMesh.scale.setScalar(this.radius * 0.75 * shrink);
 
-            // Flicker warning orange/red core
-            this.starMat.color.setHex(0xff2200);
-            this.coronaMat.color.setHex(0xff2200);
-            this.starLight.intensity = 5.0 * (1.0 + Math.sin(this.deathTimer * 80) * 0.5);
+            // Flicker warning orange/red core -> transitioning to white hot implosion
+            const rCol = Math.min(255, 255 + progress * 200);
+            const gbCol = Math.min(255, 34 + progress * 220);
+            this.starMat.uniforms.u_color.value.setRGB(rCol/255, gbCol/255, gbCol/255);
+            this.coronaMat.color.setRGB(rCol/255, gbCol/255, gbCol/255);
+            
+            this.starLight.intensity = 5.0 * (1.0 + Math.sin(this.deathTimer * 80) * 2.0);
 
             this.metricRadius.textContent = "Colapso do Núcleo de Ferro!";
         }
@@ -1477,38 +1599,44 @@ class StellarSimulation {
             this.state = 'explosion';
             const progress = (this.deathTimer - 1.5) / 2.0;
 
+            // Camera shakes and zooms out wildly
+            this.camera.fov = 25 + (progress * 35); // Zoom out to 60
+            this.camera.position.x = (Math.random() - 0.5) * 0.5 * (1.0 - progress);
+            this.camera.position.y = (Math.random() - 0.5) * 0.5 * (1.0 - progress);
+            this.camera.updateProjectionMatrix();
+
             // Blind Flash: Overexposure effect using massive white/blue geometry
-            if (progress < 0.2) {
-                this.coronaMesh.scale.setScalar(this.radius * (1.0 + progress * 80.0));
+            if (progress < 0.15) {
+                this.coronaMesh.scale.setScalar(this.radius * (1.0 + progress * 150.0));
                 this.coronaMat.color.setHex(0xffffff);
                 this.coronaMat.opacity = 1.0;
-                this.starLight.intensity = 200.0; // Overwhelming light
+                this.starLight.intensity = 500.0; // Overwhelming light
             } else {
                 // Flash fades and expanding shockwave takes over
-                this.coronaMesh.scale.setScalar(this.radius * (10.0 + progress * 20.0));
-                this.coronaMat.color.setHex(0x00aaff); // shifts to blue/cyan energy
-                this.coronaMat.opacity = (1.0 - progress) * 0.8;
-                this.starLight.intensity = 50.0 * (1.0 - progress);
+                this.coronaMesh.scale.setScalar(this.radius * (20.0 + progress * 40.0));
+                this.coronaMat.color.setHex(0x00d2ff); // shifts to blue/cyan energy
+                this.coronaMat.opacity = (1.0 - progress) * 0.9;
+                this.starLight.intensity = 150.0 * (1.0 - progress);
             }
             this.starMesh.visible = false;
             this.coronaMesh.visible = true;
             this.coronaMat.blending = THREE.AdditiveBlending;
 
             // Activate and expand particles massively at high speeds
-            this.particles.material.opacity = 1.0 - progress;
-            this.particles.material.size = 0.08 + progress * 0.15;
-            this.particles.material.color.setHex(0xff7700);
+            this.particles.material.opacity = (1.0 - progress) * 2.0;
+            this.particles.material.size = 0.15 + progress * 0.3; // Much larger debris
+            this.particles.material.color.setHex(0xffaa00);
 
             const positions = this.particles.geometry.attributes.position.array;
             for (let i = 0; i < this.particleCount; i++) {
                 const vel = this.particleVelocities[i];
-                positions[i*3] += vel.x * 0.18;
-                positions[i*3+1] += vel.y * 0.18;
-                positions[i*3+2] += vel.z * 0.18;
+                // Drag effect: particles slow down as they expand
+                const drag = Math.max(0.1, 1.0 - progress);
+                positions[i*3] += vel.x * 0.35 * drag;
+                positions[i*3+1] += vel.y * 0.35 * drag;
+                positions[i*3+2] += vel.z * 0.35 * drag;
             }
             this.particles.geometry.attributes.position.needsUpdate = true;
-
-            this.starLight.intensity = 50.0 * (1.0 - progress);
 
             this.metricRadius.textContent = "Explosão de Supernova!!";
         }
@@ -1518,19 +1646,30 @@ class StellarSimulation {
             this.coronaMesh.visible = false;
             this.particles.material.opacity = Math.max(0, 1.0 - (this.deathTimer - 1.5) * 0.2);
 
+            // Stabilize Camera
+            this.camera.fov = 40;
+            this.camera.position.x = 0;
+            this.camera.position.y = 0;
+            this.camera.updateProjectionMatrix();
+
             // Remanent object depends on original mass
             if (this.mass < 15.0) {
                 // Neutron Star (Tiny pulsar pulsing with dynamic scale)
                 this.starMesh.visible = true;
-                const pPulse = 0.05 + Math.sin(performance.now() * 0.1) * 0.01;
+                const pPulse = 0.04 + Math.sin(performance.now() * 0.5) * 0.015;
                 this.starMesh.scale.setScalar(pPulse);
-                this.starMat.color.setHex(0x00f5d4); // pulsate ciano
+                
+                // Shader needs to respond
+                this.starMat.uniforms.u_color.value.setHex(0x00ffff);
+                this.starLight.intensity = 2.0;
+                this.starLight.color.setHex(0x00ffff);
                 
                 this.metricRadius.textContent = "15 km (Estrela de Nêutrons)";
                 this.metricPres.textContent = "Pressão Degenerada de Nêutrons";
             } else {
-                // Black hole (Completely black, invisible)
+                // Black hole (Completely black, invisible, distorts space but no shader for that here)
                 this.starMesh.visible = false;
+                this.starLight.intensity = 0.0;
                 this.metricRadius.textContent = "0.0 km (Buraco Negro)";
                 this.metricPres.textContent = "Singularidade!";
             }

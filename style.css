@@ -122,6 +122,31 @@ header {
     gap: 8px;
 }
 
+.search-bar {
+    flex: 1;
+    max-width: 400px;
+    margin: 0 30px;
+}
+
+#sim-search {
+    width: 100%;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    color: var(--text-primary);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.9rem;
+    outline: none;
+    transition: all 0.3s ease;
+}
+
+#sim-search:focus {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--accent-cyan);
+    box-shadow: 0 0 10px rgba(0, 245, 212, 0.3);
+}
+
 .tab-btn {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--panel-border);

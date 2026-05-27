@@ -1,10 +1,3 @@
-// ============================================================
-//  PULSAR / MAGNETAR SIMULATION  –  v2  (full shader glow)
-//
-//  A neutron star is rendered ENTIRELY via a raymarching
-//  fragment shader.  There is NO mesh sphere, NO disk, NO
-//  Three.js geometry except a full-screen quad.
-//
 //  Physics used:
 //   • Magnetic dipole field: B(r) = B0 / r³
 //   • Surface gravity:  g = GM/R²
@@ -43,28 +36,33 @@ class PulsarSimulation {
         window.AstrophysicsLab.simulations["pulsar"] = this;
 
         this.initThree();
+        this.buildMagneticFieldLines();
         this.bindEvents();
         this.updatePhysics();
         this.animate();
     }
 
     // ----------------------------------------------------------
-    //  THREE.JS SCENE — full-screen shader quad + overlay canvas
+    //  THREE.JS SCENE — full-screen shader quad + 3D Lines overlay
     // ----------------------------------------------------------
     initThree() {
         const w = this.container.clientWidth  || 800;
         const h = this.container.clientHeight || 600;
 
         // ---- Renderer ----
-        this.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
         this.renderer.setSize(w, h);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        this.renderer.setClearColor(0x000005, 1);
+        this.renderer.setClearColor(0x000002, 1);
         this.container.appendChild(this.renderer.domElement);
 
-        // ---- Scene: orthographic camera + full-screen quad ----
-        this.scene  = new THREE.Scene();
-        this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        // ---- Scene 2D: orthographic camera + full-screen quad (Raymarching) ----
+        this.scene2D  = new THREE.Scene();
+        this.camera2D = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+        // ---- Scene 3D: perspective camera for Vector Graphics (Magnetic Field) ----
+        this.scene3D  = new THREE.Scene();
+        this.camera3D = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
 
         // ---- Uniforms ----
         this.uniforms = {
@@ -76,7 +74,7 @@ class PulsarSimulation {
         };
 
         // ---- Fragment Shader (full raymarched pulsar) ----
-        const vs = `void main(){ gl_Position = vec4(position,1.0); }`;
+        const vs = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position,1.0); }`;
 
         const fs = `
 precision highp float;
@@ -93,25 +91,14 @@ uniform vec3  u_cam;     // camera position
 #define PI  3.14159265359
 #define TAU 6.28318530718
 
-float hash11(float n){ return fract(sin(n)*43758.5453123); }
 float hash21(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123); }
-
-float noise2(vec2 p){
-    vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f);
-    return mix(mix(hash21(i),hash21(i+vec2(1,0)),f.x),
-               mix(hash21(i+vec2(0,1)),hash21(i+vec2(1,1)),f.x),f.y);
-}
-float fbm2(vec2 p){
-    float v=0.0,a=0.5;
-    for(int i=0;i<5;i++){ v+=a*noise2(p); p*=2.1; a*=0.5; }
-    return v;
-}
 
 float hash13(vec3 p){
     p=fract(p*vec3(127.1,311.7,74.7));
     p+=dot(p,p.zxy+31.32);
     return fract((p.x+p.y)*p.z);
 }
+
 float noise3(vec3 x){
     vec3 i=floor(x); vec3 f=fract(x); f=f*f*(3.0-2.0*f);
     return mix(
@@ -120,21 +107,11 @@ float noise3(vec3 x){
         mix(mix(hash13(i+vec3(0,0,1)),hash13(i+vec3(1,0,1)),f.x),
             mix(hash13(i+vec3(0,1,1)),hash13(i+vec3(1,1,1)),f.x),f.y),f.z);
 }
+
 float fbm3(vec3 p){
     float v=0.0,a=0.5;
-    for(int i=0;i<4;i++){ v+=a*noise3(p); p*=2.3; a*=0.5; }
+    for(int i=0;i<5;i++){ v+=a*noise3(p); p*=2.3; a*=0.5; }
     return v;
-}
-
-// ────────────────────────────────────────────────────────────
-//  SDFs
-// ────────────────────────────────────────────────────────────
-float sdSphere(vec3 p, float r){ return length(p)-r; }
-
-// Infinite cone along Y with half-angle α
-float sdCone(vec3 p, float alpha){
-    float q = length(p.xz);
-    return q * cos(alpha) - abs(p.y) * sin(alpha);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -144,23 +121,48 @@ mat3 rotY(float a){ float c=cos(a),s=sin(a); return mat3(c,0,-s,0,1,0,s,0,c); }
 mat3 rotZ(float a){ float c=cos(a),s=sin(a); return mat3(c,s,0,-s,c,0,0,0,1); }
 
 // ────────────────────────────────────────────────────────────
-//  STARFIELD  (fast, cheap, beautiful)
+//  CLEAN PREMIUM STARFIELD
 // ────────────────────────────────────────────────────────────
-vec3 starfield(vec3 dir){
-    vec3 col = vec3(0.0);
-    // Three layers at different scales
-    for(int i=0;i<3;i++){
-        float sc = float(i)*1.7+1.0;
-        vec2 uv = vec2(atan(dir.z,dir.x), asin(dir.y)) * sc * 4.0;
-        float s = noise2(uv*8.0);
-        s = pow(s,18.0)*3.0;
-        // star colour varies
-        vec3 tint = mix(vec3(0.9,0.95,1.0), vec3(1.0,0.8,0.5), hash21(floor(uv*8.0)));
-        col += s * tint;
+vec3 starfield(vec3 ray) {
+    ray = normalize(ray);
+    vec3 d = abs(ray);
+    vec2 uv;
+    float face;
+
+    // Cube-face projection
+    if (d.x >= d.y && d.x >= d.z) {
+        uv = ray.yz / d.x; face = ray.x > 0.0 ? 0.0 : 1.0;
+    } else if (d.y >= d.z) {
+        uv = ray.xz / d.y; face = ray.y > 0.0 ? 2.0 : 3.0;
+    } else {
+        uv = ray.xy / d.z; face = ray.z > 0.0 ? 4.0 : 5.0;
     }
-    // Faint nebula haze
-    float neb = fbm2(vec2(dir.x+dir.z, dir.y)*2.0)*0.07;
-    col += mix(vec3(0.05,0.0,0.12), vec3(0.0,0.05,0.15), dir.y*0.5+0.5)*neb;
+    uv = uv * 0.5 + 0.5;
+
+    vec3 col = vec3(0.0);
+
+    // Sparse pinpoint stars
+    for (int i = 0; i < 2; i++) {
+        float sc = 30.0 + float(i) * 25.0;
+        vec2 cell = floor(uv * sc + face * 13.0);
+        vec2 f = fract(uv * sc);
+
+        vec2 jitter = vec2(hash21(cell), hash21(cell + 13.0));
+        float dStar = length(f - jitter);
+
+        float bright = hash21(cell + 7.0);
+        bright = pow(bright, 22.0); // Extremely sparse
+        bright *= exp(-dStar * dStar * 800.0); // Tight point
+
+        float hue = hash21(cell + 11.0);
+        vec3 tint = mix(vec3(0.7, 0.85, 1.0), vec3(1.0, 0.9, 0.7), hue);
+        col += bright * tint * 4.0;
+    }
+    
+    // Very subtle deep space nebula (almost invisible, just to not be completely pitch black)
+    float neb = fbm3(ray * 2.5) * 0.05;
+    col += mix(vec3(0.0, 0.0, 0.02), vec3(0.02, 0.0, 0.04), ray.y*0.5+0.5) * neb;
+
     return col;
 }
 
@@ -180,7 +182,7 @@ void main(){
     vec3 rd   = normalize(fwd + uv.x*right + uv.y*up2);
 
     // ---- Rotation angles ----
-    float visualHz = u_spin * 0.06;  // slow down so eye can track it
+    float visualHz = u_spin * 0.04;  // slow down so eye can track it
     float spinAngle = u_time * visualHz * TAU;
     float magTilt   = PI / 6.0;      // 30° dipole tilt from spin axis
 
@@ -209,7 +211,7 @@ void main(){
     vec3  col      = vec3(0.0);
     float transmit = 1.0;
 
-    const int STEPS = 96;
+    const int STEPS = 80;
     float tMax  = 14.0;
     float tStep = tMax / float(STEPS);
     float t     = 0.02;
@@ -222,63 +224,47 @@ void main(){
 
         // ── A. Corona glow around the star ──
         {
-            float corona = exp(-max(rr - STAR_R, 0.0) * 5.5);
+            float corona = exp(-max(rr - STAR_R, 0.0) * 4.5);
             // colour: cyan-white core, blue halo
-            vec3 cCoronaCol = mix(vec3(0.3,0.7,1.0), vec3(1.0,1.0,1.0), corona);
+            vec3 cCoronaCol = mix(vec3(0.1,0.5,1.0), vec3(0.8,0.9,1.0), corona);
             // magnetar: corona shifts violet-ultraviolet
-            cCoronaCol = mix(cCoronaCol, vec3(0.9,0.3,1.0), u_mag * (1.0-corona*0.5));
-            float dens = corona * 0.035;
+            cCoronaCol = mix(cCoronaCol, vec3(0.7,0.1,1.0), u_mag * (1.0-corona*0.5));
+            float dens = corona * 0.04;
             col       += cCoronaCol * dens * transmit;
             transmit  *= exp(-dens);
         }
 
         // ── B. Relativistic polar jets ──────────────────────
-        // Distance from the magnetic axis line
         {
             float cosA = dot(normalize(p), magAxis);
             float sinA = length(p - cosA*magAxis * rr / max(length(magAxis),0.0001));
             // Jet: very tight cone, full length
-            float jetRadius = 0.08 + abs(cosA) * rr * 0.12;
+            float jetRadius = 0.04 + abs(cosA) * rr * 0.15;
             float dJet = length(p - dot(p,magAxis)*magAxis);
-            float jetCone = smoothstep(jetRadius*1.8, jetRadius*0.3, dJet);
-            float dirCheck = abs(cosA);   // 1 = on axis
+            float jetCone = smoothstep(jetRadius*2.0, jetRadius*0.1, dJet);
 
             if(jetCone > 0.001){
                 // Plasma noise along jet
-                float jNoise = noise3(p * vec3(4.0,0.5,4.0) + vec3(0.0, u_time*3.5, 0.0));
-                float decay  = exp(-rr * 0.25);
-                float dens   = jetCone * decay * (0.4 + 0.6*jNoise) * 0.06;
+                float jNoise = noise3(p * vec3(5.0,1.0,5.0) + vec3(0.0, u_time*4.5, 0.0));
+                float decay  = exp(-rr * 0.28);
+                float dens   = jetCone * decay * (0.3 + 0.7*jNoise) * 0.08;
 
                 // Jet colour: white-cyan for normal, violet for magnetar
-                vec3 jCol = mix(vec3(0.6,0.9,1.0), vec3(0.8,0.0,1.0), u_mag);
-                jCol = mix(jCol, vec3(1.0), jetCone * decay * 0.4);
+                vec3 jCol = mix(vec3(0.4,0.8,1.0), vec3(0.9,0.2,1.0), u_mag);
+                jCol = mix(jCol, vec3(1.0), jetCone * decay * 0.5);
 
                 col      += jCol * dens * transmit;
                 transmit *= exp(-dens * 0.5);
             }
         }
 
-        // ── C. Magnetic field lines glow (dipole) ─────────────
-        // Dipole field strength ~ 1/r³
-        {
-            float B  = 1.0 / (rr * rr * rr + 0.01);
-            B = clamp(B * 0.002, 0.0, 1.0);
-            vec3 Bcol = mix(vec3(0.0,0.2,0.7), vec3(0.6,0.0,1.0), u_mag);
-            float dens = B * 0.004;
-            col      += Bcol * dens * transmit;
-            transmit *= exp(-dens);
-        }
-
-        // ── D. Pulse beat — periodic bright flare ─────────────
-        // Simulates the lighthouse effect as a global brightening
-        // The glow direction is the magnetic axis; camera gets
-        // blasted when it aligns with the jet.
+        // ── C. Pulse beat — periodic bright flare ─────────────
         {
             float pulse = pow(max(0.0, dot(rd, -magAxis)), 12.0);
             pulse      += pow(max(0.0, dot(rd,  magAxis)), 12.0);
-            float beat  = max(0.0, sin(u_time * u_spin * TAU * 0.06));
+            float beat  = max(0.0, sin(u_time * u_spin * TAU * 0.04));
             beat        = pow(beat, 6.0);
-            float dens  = pulse * beat * 0.2;
+            float dens  = pulse * beat * 0.15;
             vec3 pCol   = mix(vec3(0.8,0.9,1.0), vec3(0.9,0.6,1.0), u_mag);
             col        += pCol * dens * transmit;
         }
@@ -286,34 +272,36 @@ void main(){
         t += tStep;
     }
 
-    // ─── Star surface ─────────────────────────────────────────
+    // ─── Star surface (Improved Model) ────────────────────────
     if(tHit > 0.001){
         vec3 hp    = ro + rd * tHit;
         vec3 norm  = normalize(hp);
 
-        // Spin the surface UV
+        // Spin the surface
         mat3 spinMat = rotY(spinAngle);
         vec3 sNorm   = spinMat * norm;
 
-        // Animated plasma on surface
-        vec3 ppos = sNorm * 3.0 + u_time * vec3(0.15, 0.08, 0.12);
-        float plasma = fbm3(ppos);
+        // Animated intense boiling plasma
+        vec3 ppos = sNorm * 4.0 + u_time * vec3(0.2, 0.1, 0.2);
+        // Sharp ridges for neutron degenerate matter look
+        float plasma = 1.0 - abs(fbm3(ppos) * 2.0 - 1.0); 
+        plasma = pow(plasma, 2.0);
 
-        // Base colour: hot blue-white neutron star
-        vec3 surfCol = mix(vec3(0.2,0.6,1.0), vec3(1.0,1.0,1.0), plasma*0.8);
+        // Base colour: extremely hot blue-white
+        vec3 surfCol = mix(vec3(0.0,0.4,0.9), vec3(1.0,1.0,1.0), plasma);
 
         // Poles (magnetic axis on sphere): bright hot-spots
         float poleAlign = abs(dot(norm, magAxis));
-        vec3  polCol    = mix(vec3(0.5,0.9,1.0), vec3(0.9,0.3,1.0), u_mag);
-        surfCol = mix(surfCol, polCol*3.0, pow(poleAlign, 4.0));
+        vec3  polCol    = mix(vec3(0.6,0.9,1.0), vec3(1.0,0.4,1.0), u_mag);
+        surfCol = mix(surfCol, polCol*2.5, pow(poleAlign, 6.0));
 
-        // Fresnel edge — limb is slightly dimmer
+        // Fresnel edge — limb darkening
         float fresnel = 1.0 - max(dot(norm, -rd), 0.0);
-        surfCol      *= 1.0 - fresnel*0.3;
+        surfCol      *= 1.0 - fresnel*0.4;
 
-        // Surface emits extra brightness near poles for "hot cap" look
-        float hotCap = pow(poleAlign, 6.0) * 2.0;
-        surfCol += vec3(1.0,1.0,1.0) * hotCap;
+        // Add blinding white core at the exact poles
+        float hotCap = pow(poleAlign, 16.0) * 3.0;
+        surfCol += vec3(1.0) * hotCap;
 
         col += surfCol * transmit;
         transmit = 0.0;
@@ -339,7 +327,7 @@ void main(){
         });
 
         const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.shaderMat);
-        this.scene.add(quad);
+        this.scene2D.add(quad);
 
         // ---- Flash overlay div ----
         this.flashDiv = document.createElement("div");
@@ -354,7 +342,67 @@ void main(){
     }
 
     // ----------------------------------------------------------
-    //  MOUSE ORBIT  (no OrbitControls needed for 2D shader cam)
+    //  MAGNETIC FIELD LINES (3D Vector Overlay)
+    // ----------------------------------------------------------
+    buildMagneticFieldLines() {
+        // Equation for magnetic dipole field line: r = L * sin^2(theta)
+        const L_values = [1.2, 1.8, 2.6, 3.8, 5.5]; // Shell sizes
+        const numLongitudes = 16;
+        const ptsPerLine = 64;
+
+        const points = [];
+        const colors = [];
+
+        for (let L of L_values) {
+            for (let i = 0; i < numLongitudes; i++) {
+                const phi = (i / numLongitudes) * Math.PI * 2;
+                
+                for (let j = 0; j <= ptsPerLine; j++) {
+                    // Theta goes from 0 to PI. We skip exactly 0 and PI so r doesn't hit 0 inside the star
+                    // We only draw lines outside the star surface (r > 0.55)
+                    const theta = 0.01 + (j / ptsPerLine) * (Math.PI - 0.02);
+                    const r = L * Math.sin(theta) * Math.sin(theta);
+                    
+                    if (r < 0.55) continue; // Inside the star
+
+                    // Spherical to Cartesian
+                    const x = r * Math.sin(theta) * Math.cos(phi);
+                    const z = r * Math.sin(theta) * Math.sin(phi);
+                    const y = r * Math.cos(theta); // Magnetic axis is Y
+
+                    points.push(x, y, z);
+                    
+                    // Alpha fade out further away
+                    const alpha = Math.max(0, 1.0 - (r / 6.0));
+                    colors.push(alpha, alpha, alpha);
+                }
+            }
+        }
+
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+        geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+        // Use LineBasicMaterial with vertex colors to create glowing lines
+        this.magMat = new THREE.LineBasicMaterial({
+            color: 0x44aaff,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        this.magLines = new THREE.Line(geo, this.magMat);
+        
+        // We put all lines into a group so we can rotate them together based on spin/tilt
+        this.magGroup = new THREE.Group();
+        this.magGroup.add(this.magLines);
+        this.scene3D.add(this.magGroup);
+    }
+
+    // ----------------------------------------------------------
+    //  MOUSE ORBIT
     // ----------------------------------------------------------
     _initMouseOrbit() {
         this._theta = 0.3;   // horizontal angle
@@ -387,7 +435,13 @@ void main(){
         const x = this._camR * Math.sin(this._phi) * Math.sin(this._theta);
         const y = this._camR * Math.cos(this._phi);
         const z = this._camR * Math.sin(this._phi) * Math.cos(this._theta);
+        
+        // Update shader camera
         this.uniforms.u_cam.value.set(x, y, z);
+        
+        // Update 3D Lines camera
+        this.camera3D.position.set(x, y, z);
+        this.camera3D.lookAt(0, 0, 0);
     }
 
     // ----------------------------------------------------------
@@ -439,6 +493,13 @@ void main(){
         const magFrac = Math.min(magLog / 4, 1);
         this.uniforms.u_mag.value   = magFrac;
         this.uniforms.u_spin.value  = this.spinRate;
+        
+        // Change magnetic line color based on magnetar intensity
+        const baseCol = new THREE.Color(0x44aaff);
+        const magCol  = new THREE.Color(0xdc44ff);
+        this.magMat.color.copy(baseCol).lerp(magCol, magFrac);
+        // Increase opacity as field gets stronger
+        this.magMat.opacity = 0.5 + magFrac * 0.5;
     }
 
     // ----------------------------------------------------------
@@ -458,13 +519,29 @@ void main(){
         this._totalTime += dt;
         this.uniforms.u_time.value = this._totalTime;
 
-        // Lighthouse flash (simple: pulse based on spin and time modulation)
-        const visualHz  = this.spinRate * 0.06;
+        // Update Magnetic Field Lines Rotation
+        const visualHz  = this.spinRate * 0.04;
+        const spinAngle = this._totalTime * visualHz * Math.PI * 2;
+        const magTilt   = Math.PI / 6.0; // 30 degrees
+        
+        // The shader performs rotY(spin) * rotZ(tilt) on the Y axis
+        // We replicate this rotation on the 3D group
+        this.magGroup.rotation.set(0, 0, 0); // Reset
+        this.magGroup.rotateY(spinAngle);
+        this.magGroup.rotateZ(magTilt);
+
+        // Lighthouse flash
         const beatPhase = Math.sin(this._totalTime * visualHz * Math.PI * 2);
         const flash     = Math.pow(Math.max(0, beatPhase), 8);
         this.flashDiv.style.opacity = (flash * 0.35 * this.uniforms.u_mag.value).toFixed(3);
 
-        this.renderer.render(this.scene, this.camera);
+        // Render pass 1: Raymarched Shader (clears screen)
+        this.renderer.autoClear = true;
+        this.renderer.render(this.scene2D, this.camera2D);
+        
+        // Render pass 2: 3D Vector Lines (on top without clearing)
+        this.renderer.autoClear = false;
+        this.renderer.render(this.scene3D, this.camera3D);
     }
 
     resize() {
@@ -473,6 +550,9 @@ void main(){
         if (w === 0 || h === 0) return;
         this.renderer.setSize(w, h);
         this.uniforms.u_resolution.value.set(w, h);
+        
+        this.camera3D.aspect = w / h;
+        this.camera3D.updateProjectionMatrix();
     }
 }
 

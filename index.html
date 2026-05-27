@@ -19,17 +19,13 @@
     <div class="app-container">
         <!-- Barra superior de Navegação -->
         <header>
-            <div class="logo-section">
+            <div class="logo-section" id="btn-home" style="cursor: pointer;" title="Voltar ao Menu Principal">
                 <div class="logo-icon"></div>
                 <h1>ASTROPHYSICS LAB</h1>
             </div>
             
-            <div class="tabs-nav">
-                <button class="tab-btn active" data-tab="lobby">MENU PRINCIPAL</button>
-                <button class="tab-btn" data-tab="kepler">LEIS DE KEPLER</button>
-                <button class="tab-btn" data-tab="stellar">FÍSICA ESTELAR</button>
-                <button class="tab-btn" data-tab="blackhole">HORIZONTE DE EVENTOS</button>
-                <button class="tab-btn" data-tab="pulsar">PULSARES MAGNÉTICOS</button>
+            <div class="search-bar">
+                <input type="text" id="sim-search" placeholder="Buscar simulação (ex: pulsar, buraco negro)...">
             </div>
 
             <div class="system-status">
@@ -111,6 +107,23 @@
                         <div class="lobby-card-info">
                             <h3>Pulsar (Estrela de Nêutrons)</h3>
                             <p>Experimente a rotação alucinante e os jatos polares relativísticos (efeito farol) de uma estrela morta superdensa. Controle campos magnéticos monstruosos a nível de Magnetar.</p>
+                        </div>
+                        <div class="lobby-card-footer">
+                            <button class="enter-sim-btn">
+                                Acessar Módulo
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- CARD 5: SUPERNOVA -->
+                    <div class="lobby-card card-supernova" data-tab="supernova">
+                        <div class="lobby-card-image" style="background: linear-gradient(45deg, #3d0000, #ff6432);">
+                            <div class="lobby-card-graphic"></div>
+                        </div>
+                        <div class="lobby-card-info">
+                            <h3>Supernova em Câmera Lenta</h3>
+                            <p>Testemunhe o colapso de núcleo catastrófico. Gele o tempo para assistir a onda de choque estelar desintegrar e resfriar a casca em frações microscópicas de segundo.</p>
                         </div>
                         <div class="lobby-card-footer">
                             <button class="enter-sim-btn">
@@ -570,6 +583,85 @@ a³ = 1.00 | Razão T²/a³ = 1.000</div>
                 </div>
             </section>
 
+
+            <!-- ========================================== -->
+            <!-- TAB: SUPERNOVA                             -->
+            <!-- ========================================== -->
+            <section id="tab-supernova" class="tab-content" style="display: none;">
+                <div class="simulation-view">
+                    <div id="supernova-container" class="canvas-container">
+                        <!-- Supernova WebGL Render Here -->
+                        <div class="overlay-info">
+                            <h3>Colapso de Núcleo (Core-Collapse)</h3>
+                            <div class="metrics-grid">
+                                <div class="metric">
+                                    <span class="label">Tempo após Colapso</span>
+                                    <span class="value" id="metric-sn-time">0.000 s</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="label">Raio da Expansão</span>
+                                    <span class="value" id="metric-sn-radius">0.00 km</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="label">Velocidade da Ejeção</span>
+                                    <span class="value" id="metric-sn-speed">0 km/s</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="label">Temperatura do Núcleo</span>
+                                    <span class="value" id="metric-sn-temp">0 K</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="side-panel">
+                    <h2>Controle de Evento Cataclísmico</h2>
+                    <p class="panel-desc">Acompanhe a detonação de uma estrela massiva em câmera lenta extrema. A onda de choque expele poeira estelar formando uma nebulosa em tempo real.</p>
+
+                    <div class="control-group">
+                        <h3>1. Parâmetros da Progenitora</h3>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Massa Estelar Inicial (M<sub>☉</sub>)</span>
+                                <span class="value-display" id="sn-mass-num">25.0</span>
+                            </div>
+                            <input type="range" id="sn-mass" min="8" max="150" step="1" value="25">
+                            <div class="input-desc">Determina a força da explosão e a densidade da poeira gerada.</div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" style="border-color: rgba(255,100,50,0.5);">
+                        <h3 style="color: #ff6432;">2. Controle Temporal Extremo</h3>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Escala de Tempo (Time Scale)</span>
+                                <span class="value-display" id="sn-timescale-num" style="color: #00f5d4; font-weight: bold;">1.0000x</span>
+                            </div>
+                            <!-- Logarithmic-like slider using steps -->
+                            <input type="range" id="sn-timescale" min="0" max="6" step="1" value="6">
+                            <div class="input-desc">Use a câmera lenta extrema para ver a luz e a onda de choque rasgando a estrela centímetro por centímetro.</div>
+                            
+                            <!-- Custom scale markers -->
+                            <div style="display: flex; justify-content: space-between; font-size: 0.6rem; color: #666; margin-top: 5px;">
+                                <span>0.00000025x</span>
+                                <span>0.0001x</span>
+                                <span>0.01x</span>
+                                <span>1x</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" style="border-color: rgba(0,245,212,0.25); background: rgba(0,245,212,0.03);">
+                        <h3 style="color: var(--accent-cyan);">Ação</h3>
+                        <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <button id="btn-sn-detonate" class="btn-primary" style="flex: 1; font-weight: bold; font-size: 1.1rem;">DETONAR SUPERNOVA</button>
+                            <button id="btn-sn-reset" class="btn-primary" style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2);">RESETAR</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
         </main>
     </div>
 
@@ -589,5 +681,6 @@ a³ = 1.00 | Razão T²/a³ = 1.000</div>
     <script src="js/stellar.js"></script>
     <script src="js/blackhole.js"></script>
     <script src="js/pulsar.js"></script>
+    <script src="js/supernova.js"></script>
 </body>
 </html>

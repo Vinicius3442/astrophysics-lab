@@ -135,6 +135,36 @@ function initTabs() {
             switchTab(targetTab);
         });
     });
+
+    // Home Button (Logo)
+    const btnHome = document.getElementById("btn-home");
+    if (btnHome) {
+        btnHome.addEventListener("click", () => {
+            switchTab('lobby');
+        });
+    }
+
+    // Search Bar Filter
+    const searchInput = document.getElementById("sim-search");
+    if (searchInput) {
+        searchInput.addEventListener("input", (e) => {
+            const term = e.target.value.toLowerCase();
+            // Automatically switch to lobby to show results if not already there
+            if (window.AstrophysicsLab.activeTab !== 'lobby' && term.length > 0) {
+                switchTab('lobby');
+            }
+            
+            lobbyCards.forEach(card => {
+                const title = card.querySelector("h3").innerText.toLowerCase();
+                const desc = card.querySelector("p").innerText.toLowerCase();
+                if (title.includes(term) || desc.includes(term)) {
+                    card.style.display = "flex";
+                } else {
+                    card.style.display = "none";
+                }
+            });
+        });
+    }
 }
 
 // 3. FPS Monitoring System
