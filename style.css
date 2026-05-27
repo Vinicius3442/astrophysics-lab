@@ -769,10 +769,9 @@ input:checked + .slider-switch:before {
    ========================================== */
 
 #tab-lobby {
-    grid-template-columns: 1fr;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
     padding: 40px;
     overflow-y: auto;
