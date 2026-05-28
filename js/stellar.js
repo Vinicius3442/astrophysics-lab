@@ -204,8 +204,8 @@ class StellarSimulation {
             
             const results = this.starsDatabase.filter(star => 
                 star.name.toLowerCase().includes(query) || 
-                star.tags.some(tag => tag.toLowerCase().includes(query))
-            );
+                (star.tags && star.tags.some(tag => tag.toLowerCase().includes(query)))
+            ).slice(0, 50); // LIMIT TO 50 RESULTS FOR PERFORMANCE
             
             this.searchSuggestions.innerHTML = '';
             if (results.length > 0) {
@@ -216,7 +216,9 @@ class StellarSimulation {
                     div.style.cursor = "pointer";
                     div.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
                     div.style.fontSize = "0.8rem";
-                    div.innerHTML = `<strong style="color:var(--accent-cyan);">${star.name}</strong><br><span style="color:var(--text-secondary); font-size:0.7rem;">${star.type}</span>`;
+                    
+                    const typeDisplay = star.type ? star.type : `${star.temp}K • ${star.mass} M☉`;
+                    div.innerHTML = `<strong style="color:var(--accent-cyan);">${star.name}</strong><br><span style="color:var(--text-secondary); font-size:0.7rem;">${typeDisplay}</span>`;
                     
                     // Hover effect
                     div.addEventListener("mouseenter", () => div.style.background = "rgba(0, 245, 212, 0.15)");
