@@ -24,7 +24,7 @@ class SupernovaSimulation {
         this.metricTemp   = document.getElementById("metric-sn-temp");
 
         // State
-        this.isActive = false;
+        this.isActive = true;
         this.mass = 25.0; // Solar masses
         
         // Time logic
@@ -514,7 +514,7 @@ void main() {
         this.uniforms.u_resolution.value.set(w, h);
     }
 
-    pause()  { this.isActive = false; }
+    pause()  { this.isActive = true; }
     resume() {
         this.isActive = true;
         setTimeout(() => this.resize(), 50);

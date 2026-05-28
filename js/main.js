@@ -1,14 +1,49 @@
-// ASTROPHYSICS LAB - MAIN CONTROL SYSTEM
+// PHYSICS BOX - MAIN SHARED SYSTEM
 document.addEventListener("DOMContentLoaded", () => {
-    initStarfield();
-    initTabs();
-    initFPSCounter();
+    // Only init starfield on home page or if specifically requested
+    if (document.getElementById("starfield-canvas")) {
+        initStarfield();
+    }
+    
+    if (document.getElementById("fps-counter")) {
+        initFPSCounter();
+    }
+    
+    
+    // Home Page Search Logic
+    const homeSearch = document.getElementById("neal-home-search");
+    if (homeSearch) {
+        homeSearch.addEventListener("input", (e) => {
+            const query = e.target.value.toLowerCase();
+            const cards = document.querySelectorAll(".neal-card");
+            cards.forEach(card => {
+                const title = card.querySelector("h2") ? card.querySelector("h2").textContent.toLowerCase() : "";
+                // also check href for keywords
+                const href = card.getAttribute("href") || "";
+                if (title.includes(query) || href.includes(query)) {
+                    card.style.display = "flex";
+                } else {
+                    card.style.display = "none";
+                }
+            });
+        });
+    }
+
+    // Set global tab based on pathname for legacy compatibility in modules
+    const path = window.location.pathname;
+    if (path.includes("kepler")) window.AstrophysicsLab.activeTab = "kepler";
+    else if (path.includes("stellar")) window.AstrophysicsLab.activeTab = "stellar";
+    else if (path.includes("blackhole")) window.AstrophysicsLab.activeTab = "blackhole";
+    else if (path.includes("pulsar")) window.AstrophysicsLab.activeTab = "pulsar";
+    else if (path.includes("supernova")) window.AstrophysicsLab.activeTab = "supernova";
+    else if (path.includes("galaxy")) window.AstrophysicsLab.activeTab = "galaxy";
+    else window.AstrophysicsLab.activeTab = "lobby";
 });
 
 // Global State
 window.AstrophysicsLab = {
-    activeTab: 'kepler',
-    simulations: {}, // Will store references to active simulation instances
+    activeTab: 'lobby',
+    simulations: {},
     isPaused: false
 };
 
@@ -43,9 +78,9 @@ function initStarfield() {
     function getRandomStarColor() {
         const colors = [
             'rgba(255, 255, 255, ',
-            'rgba(173, 216, 230, ', // Light Blue
-            'rgba(255, 244, 234, ', // Soft Warm White
-            'rgba(255, 224, 189, '  // Soft Orange
+            'rgba(173, 216, 230, ',
+            'rgba(255, 244, 234, ',
+            'rgba(255, 224, 189, '
         ];
         return colors[Math.floor(Math.random() * colors.length)];
     }
@@ -55,7 +90,7 @@ function initStarfield() {
         
         stars.forEach(star => {
             star.phase += star.twinkleSpeed;
-            const alpha = 0.2 + (Math.sin(star.phase) + 1) * 0.4; // Twinkling effect
+            const alpha = 0.2 + (Math.sin(star.phase) + 1) * 0.4;
             ctx.fillStyle = star.color + alpha + ')';
             ctx.beginPath();
             ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
@@ -70,106 +105,11 @@ function initStarfield() {
     animateStars();
 }
 
-// 2. Tab Navigation & Simulation Toggling
-function initTabs() {
-    const tabButtons = document.querySelectorAll(".tab-btn");
-    const simulationViews = document.querySelectorAll(".simulation-view");
-    const lobbyCards = document.querySelectorAll(".lobby-card");
-    
-    function switchTab(targetTab) {
-        // Update Active Buttons in Nav Header
-        tabButtons.forEach(btn => {
-            btn.classList.remove("active");
-            if (btn.getAttribute("data-tab") === targetTab) {
-                btn.classList.add("active");
-            }
-        });
-        
-        // Switch Views
-        simulationViews.forEach(view => {
-            view.classList.remove("active");
-            if (view.id === `tab-${targetTab}`) {
-                view.classList.add("active");
-            }
-        });
-        
-        // Update global state active tracker
-        const oldTab = window.AstrophysicsLab.activeTab;
-        window.AstrophysicsLab.activeTab = targetTab;
-        
-        // Notify respective simulation objects of the tab change
-        Object.keys(window.AstrophysicsLab.simulations).forEach(key => {
-            const sim = window.AstrophysicsLab.simulations[key];
-            if (key === targetTab) {
-                if (sim && typeof sim.resume === 'function') {
-                    // Small delay to ensure the display transition is computed and width > 0
-                    setTimeout(() => {
-                        sim.resume();
-                    }, 50);
-                }
-            } else {
-                if (sim && typeof sim.pause === 'function') {
-                    sim.pause();
-                }
-            }
-        });
-        
-        // Auto resize triggers for Three.js renderers
-        setTimeout(() => {
-            window.dispatchEvent(new Event('resize'));
-        }, 150);
-    }
-    
-    // Header Nav clicks
-    tabButtons.forEach(button => {
-        button.addEventListener("click", () => {
-            const targetTab = button.getAttribute("data-tab");
-            switchTab(targetTab);
-        });
-    });
-
-    // Lobby Cards clicks
-    lobbyCards.forEach(card => {
-        card.addEventListener("click", () => {
-            const targetTab = card.getAttribute("data-tab");
-            switchTab(targetTab);
-        });
-    });
-
-    // Home Button (Logo)
-    const btnHome = document.getElementById("btn-home");
-    if (btnHome) {
-        btnHome.addEventListener("click", () => {
-            switchTab('lobby');
-        });
-    }
-
-    // Search Bar Filter
-    const searchInput = document.getElementById("sim-search");
-    if (searchInput) {
-        searchInput.addEventListener("input", (e) => {
-            const term = e.target.value.toLowerCase();
-            // Automatically switch to lobby to show results if not already there
-            if (window.AstrophysicsLab.activeTab !== 'lobby' && term.length > 0) {
-                switchTab('lobby');
-            }
-            
-            lobbyCards.forEach(card => {
-                const title = card.querySelector("h3").innerText.toLowerCase();
-                const desc = card.querySelector("p").innerText.toLowerCase();
-                if (title.includes(term) || desc.includes(term)) {
-                    card.style.display = "flex";
-                } else {
-                    card.style.display = "none";
-                }
-            });
-        });
-    }
-}
-
-// 3. FPS Monitoring System
+// 2. FPS Monitoring System
 function initFPSCounter() {
     const counterEl = document.getElementById("fps-counter");
+    if (!counterEl) return;
+    
     let lastTime = performance.now();
     let frameCount = 0;
     
@@ -183,14 +123,9 @@ function initFPSCounter() {
             frameCount = 0;
             lastTime = now;
             
-            // Colorize based on performance
-            if (fps >= 55) {
-                counterEl.style.color = 'var(--accent-cyan)';
-            } else if (fps >= 30) {
-                counterEl.style.color = 'var(--accent-yellow)';
-            } else {
-                counterEl.style.color = 'var(--accent-red)';
-            }
+            if (fps >= 55) counterEl.style.color = 'var(--accent-cyan)';
+            else if (fps >= 30) counterEl.style.color = 'var(--accent-yellow)';
+            else counterEl.style.color = 'var(--accent-red)';
         }
         requestAnimationFrame(updateFPS);
     }

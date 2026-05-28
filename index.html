@@ -3,800 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Laboratório de Astrofísica Avançado | Simulação Física Real</title>
+    <title>Physics Box</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Three.js CDN (Paired unpkg releases) -->
-    <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
-    <!-- Three.js OrbitControls -->
-    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
 </head>
-<body>
-
-    <!-- Fundo espacial e estrelas dinâmicas -->
+<body class="neal-body">
     <div id="space-bg"></div>
     <canvas id="starfield-canvas"></canvas>
 
-    <div class="app-container">
-        <!-- Barra superior de Navegação -->
-        <header>
-            <div class="logo-section" id="btn-home" style="cursor: pointer;" title="Voltar ao Menu Principal">
-                <div class="logo-icon"></div>
-                <h1>ASTROPHYSICS LAB</h1>
-            </div>
-            
-            <div class="search-bar">
-                <input type="text" id="sim-search" placeholder="Buscar simulação (ex: pulsar, buraco negro)...">
-            </div>
-
-            <div class="system-status">
-                <div class="status-indicator">
-                    <span class="status-dot"></span>
-                    <span>MOTOR DE FÍSICA: ATIVO</span>
-                </div>
-                <span>FPS: <span id="fps-counter">60</span></span>
-            </div>
+    <div class="neal-container">
+        <header class="neal-header">
+            <h1 class="neal-title">Physics Box</h1>
+            <p class="neal-subtitle">Explore os segredos do universo com simulações interativas.</p>
         </header>
 
-        <!-- Área Principal de Simulação -->
-        <main>
-            
-            <!-- 0. LOBBY / MENU INICIAL -->
-            <section id="tab-lobby" class="simulation-view active">
-                <div class="lobby-title-section">
-                    <h2>Centro de Controle de Astrofísica</h2>
-                    <p>Selecione um módulo interativo baseado em fórmulas e equações físicas reais.</p>
-                </div>
-                
-                <div class="lobby-cards-grid">
-                    <!-- CARD 1: KEPLER -->
-                    <div class="lobby-card card-kepler" data-tab="kepler">
-                        <div class="lobby-card-image">
-                            <div class="lobby-card-graphic"></div>
-                        </div>
-                        <div class="lobby-card-info">
-                            <h3>Leis de Kepler e Órbitas</h3>
-                            <p>Simule a gravitação clássica newtoniana em órbitas elípticas. Ajuste semi-eixo e excentricidade, veja a varredura constante de áreas iguais por tempo e comprove a terceira lei harmônica.</p>
-                        </div>
-                        <div class="lobby-card-footer">
-                            <button class="enter-sim-btn">
-                                Acessar Módulo
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- CARD 2: ESTRELA -->
-                    <div class="lobby-card card-stellar" data-tab="stellar">
-                        <div class="lobby-card-image">
-                            <div class="lobby-card-graphic"></div>
-                        </div>
-                        <div class="lobby-card-info">
-                            <h3>Termodinâmica e Ciclos Estelares</h3>
-                            <p>Acesse o interior de uma estrela real. Com o modo corte transversal, inspecione a convecção estelar, as fusões termonucleares de prótons p-p e CNO no núcleo ativo e gere supernovas hiper-realistas.</p>
-                        </div>
-                        <div class="lobby-card-footer">
-                            <button class="enter-sim-btn">
-                                Acessar Módulo
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- CARD 3: BURACO NEGRO -->
-                    <div class="lobby-card card-blackhole" data-tab="blackhole">
-                        <div class="lobby-card-image">
-                            <div class="lobby-card-graphic"></div>
-                        </div>
-                        <div class="lobby-card-info">
-                            <h3>Buraco Negro de Schwarzschild</h3>
-                            <p>Explore as lentes gravitacionais relativísticas ao redor da singularidade de Gargantua. Controle a câmera tridimensional em órbita com mouse e zoom nas geodésicas de Schwarzschild.</p>
-                        </div>
-                        <div class="lobby-card-footer">
-                            <button class="enter-sim-btn">
-                                Acessar Módulo
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- CARD 4: PULSAR -->
-                    <div class="lobby-card card-pulsar" data-tab="pulsar">
-                        <div class="lobby-card-image" style="background: linear-gradient(45deg, #100b21, #2b0f4c);">
-                            <div class="lobby-card-graphic"></div>
-                        </div>
-                        <div class="lobby-card-info">
-                            <h3>Pulsar (Estrela de Nêutrons)</h3>
-                            <p>Experimente a rotação alucinante e os jatos polares relativísticos (efeito farol) de uma estrela morta superdensa. Controle campos magnéticos monstruosos a nível de Magnetar.</p>
-                        </div>
-                        <div class="lobby-card-footer">
-                            <button class="enter-sim-btn">
-                                Acessar Módulo
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- CARD 5: SUPERNOVA -->
-                    <div class="lobby-card card-supernova" data-tab="supernova">
-                        <div class="lobby-card-image" style="background: linear-gradient(45deg, #3d0000, #ff6432);">
-                            <div class="lobby-card-graphic"></div>
-                        </div>
-                        <div class="lobby-card-info">
-                            <h3>Supernova em Câmera Lenta</h3>
-                            <p>Testemunhe o colapso de núcleo catastrófico. Gele o tempo para assistir a onda de choque estelar desintegrar e resfriar a casca em frações microscópicas de segundo.</p>
-                        </div>
-                        <div class="lobby-card-footer">
-                            <button class="enter-sim-btn">
-                                Acessar Módulo
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- CARD 6: COLISÃO DE GALÁXIAS -->
-                    <div class="lobby-card card-galaxy" data-tab="galaxy">
-                        <div class="lobby-card-image" style="background: linear-gradient(45deg, #090011, #1e003a);">
-                            <div class="lobby-card-graphic"></div>
-                        </div>
-                        <div class="lobby-card-info">
-                            <h3>Colisão de Galáxias N-Body</h3>
-                            <p>Simule o problema restrito de 3 corpos. Jogue duas galáxias espirais com 40 mil estrelas uma contra a outra e distorça a gravidade usando halos de Matéria Escura.</p>
-                        </div>
-                        <div class="lobby-card-footer">
-                            <button class="enter-sim-btn">
-                                Acessar Módulo
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-            
-            <!-- 1. SIMULAÇÃO DAS LEIS DE KEPLER -->
-            <section id="tab-kepler" class="simulation-view">
-                <div class="canvas-container" id="kepler-canvas-container">
-                    <div class="overlay-info">
-                        <h3>Órbita Kepleriana</h3>
-                        <p>Simulação realista das Leis de Kepler baseada na resolução numérica da Equação de Kepler por Newton-Raphson.</p>
-                        <div class="overlay-metrics">
-                            <div class="metric-row">
-                                <span class="metric-label">Anomalia Média (M)</span>
-                                <span class="metric-value" id="metric-k-m">0.00 rad</span>
-                            </div>
-                            <div class="metric-row">
-                                <span class="metric-label">Anomalia Excêntrica (E)</span>
-                                <span class="metric-value" id="metric-k-e">0.00 rad</span>
-                            </div>
-                            <div class="metric-row">
-                                <span class="metric-label">Velocidade Orbital (v)</span>
-                                <span class="metric-value" id="metric-k-v">29.78 km/s</span>
-                            </div>
-                            <div class="metric-row">
-                                <span class="metric-label">Distância Orbital (r)</span>
-                                <span class="metric-value" id="metric-k-r">1.00 UA</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="control-sidebar">
-                    <div class="panel-header">
-                        <h2>Mecânica Orbital</h2>
-                        <p>Ajuste os parâmetros da órbita do planeta.</p>
-                    </div>
-                    
-                    <!-- Seletor de Leis (Sub-abas) -->
-                    <div class="control-group" style="border-color: var(--accent-blue);">
-                        <h3>Módulos de Estudo (3 Leis)</h3>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;">
-                            <button class="btn-secondary active" id="btn-k-law1" style="font-size: 0.65rem; padding: 8px 0; text-align: center; font-weight:700;">1ª LEI</button>
-                            <button class="btn-secondary" id="btn-k-law2" style="font-size: 0.65rem; padding: 8px 0; text-align: center; font-weight:700;">2ª LEI</button>
-                            <button class="btn-secondary" id="btn-k-law3" style="font-size: 0.65rem; padding: 8px 0; text-align: center; font-weight:700;">3ª LEI</button>
-                        </div>
-                    </div>
-
-                    <!-- Módulo 1ª Lei: Geometria -->
-                    <div class="control-group" id="group-k-law1">
-                        <h3>Geometria da Órbita (1ª Lei)</h3>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Semi-eixo Maior (a)</span>
-                                <span class="control-value"><span id="val-k-a">1.00</span> UA</span>
-                            </div>
-                            <input type="range" id="slider-k-a" min="0.4" max="5.0" step="0.1" value="1.0">
-                        </div>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Excentricidade (e)</span>
-                                <span class="control-value" id="val-k-ecc">0.02</span>
-                            </div>
-                            <input type="range" id="slider-k-ecc" min="0.0" max="0.9" step="0.01" value="0.02">
-                        </div>
-                        <p style="font-size:0.65rem; color:var(--text-secondary); line-height:1.3; margin-top:5px;">
-                            Exibe a trajetória elíptica com a estrela no foco principal e um marcador geométrico sutil no foco secundário vazio.
-                        </p>
-                    </div>
-
-                    <!-- Módulo 2ª Lei: Áreas -->
-                    <div class="control-group" id="group-k-law2" style="display: none;">
-                        <h3>Lei das Áreas (2ª Lei)</h3>
-                        <div class="switch-container">
-                            <span class="control-label" style="font-size: 0.8rem;">Visualizar Áreas Orbitais</span>
-                            <label class="switch">
-                                <input type="checkbox" id="toggle-k-areas" checked>
-                                <span class="slider-switch"></span>
-                            </label>
-                        </div>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Intervalo de Tempo (&Delta;t)</span>
-                                <span class="control-value"><span id="val-k-dt">2.0</span> meses</span>
-                            </div>
-                            <input type="range" id="slider-k-dt" min="0.5" max="4.0" step="0.1" value="2.0">
-                        </div>
-                        <div class="kepler-legend">
-                            <div class="legend-item">
-                                <span class="legend-color" style="background: rgba(0, 245, 212, 0.4);"></span>
-                                <span>Área Varrida A₁ = A₂</span>
-                            </div>
-                        </div>
-                        <p style="font-size:0.65rem; color:var(--text-secondary); line-height:1.3; margin-top:5px;">
-                            O planeta varre áreas iguais em tempos iguais. Vetores exibem a Velocidade Tangencial (<span style="color:var(--accent-cyan); font-weight:600;">Ciano</span>) e a Força Gravitacional (<span style="color:var(--accent-red); font-weight:600;">Vermelho</span>).
-                        </p>
-                    </div>
-
-                    <!-- Módulo 3ª Lei: Períodos -->
-                    <div class="control-group" id="group-k-law3" style="display: none;">
-                        <h3>Lei dos Períodos (3ª Lei)</h3>
-                        <div class="control-item" style="margin-bottom: 8px;">
-                            <label class="control-label" style="font-size: 0.78rem; margin-bottom: 4px; color: var(--accent-blue);">Carregar Planeta Real</label>
-                            <select id="select-k-planet" class="num-input" style="width: 100%; text-align: left; padding: 6px 12px; height: auto;">
-                                <option value="custom">-- Customizado (Use sliders) --</option>
-                                <option value="mercury">Mercúrio (a = 0.39 UA, e = 0.206)</option>
-                                <option value="venus">Vênus (a = 0.72 UA, e = 0.007)</option>
-                                <option value="earth" selected>Terra (a = 1.00 UA, e = 0.017)</option>
-                                <option value="mars">Marte (a = 1.52 UA, e = 0.093)</option>
-                                <option value="jupiter">Júpiter (a = 5.20 UA, e = 0.048)</option>
-                                <option value="saturn">Saturno (a = 9.58 UA, e = 0.054)</option>
-                            </select>
-                        </div>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Massa da Estrela (M)</span>
-                                <span class="control-value"><span id="val-k-mstar">1.0</span> M<sub>&odot;</sub></span>
-                            </div>
-                            <input type="range" id="slider-k-mstar" min="0.2" max="3.0" step="0.1" value="1.0">
-                        </div>
-                        <div class="formula-card" id="formula-3rd-law">T² = a³ / M_estrela
-T = 1.00 anos | T² = 1.00
-a³ = 1.00 | Razão T²/a³ = 1.000</div>
-                    </div>
-
-                    <!-- Controles Comuns -->
-                    <div class="control-group">
-                        <h3>Controle de Simulação</h3>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Velocidade de Execução</span>
-                            </div>
-                            <input type="range" id="slider-k-speed" min="0" max="5" step="0.2" value="1">
-                        </div>
-                        <button class="btn-secondary" id="btn-k-reset" style="width: 100%;">Reiniciar Planeta</button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- 2. SIMULAÇÃO DE FÍSICA ESTELAR -->
-            <section id="tab-stellar" class="simulation-view">
-                <div class="canvas-container" id="stellar-canvas-container">
-                    <div class="overlay-info">
-                        <h3>Ciclo de Vida Estelar</h3>
-                        <p>Simulador termodinâmico de nucleossíntese estelar e equilíbrio hidrostático.</p>
-                        <div class="overlay-metrics">
-                            <div class="metric-row">
-                                <span class="metric-label">Raio Estelar (R)</span>
-                                <span class="metric-value" id="metric-s-r">1.00 R<sub>&odot;</sub></span>
-                            </div>
-                            <div class="metric-row">
-                                <span class="metric-label">Classificação</span>
-                                <span class="metric-value" id="metric-s-class" style="color: var(--accent-cyan); font-weight: bold;">Anã Amarela (G2V)</span>
-                            </div>
-                            <div class="metric-row">
-                                <span class="metric-label">Temperatura Central (Tc)</span>
-                                <span class="metric-value" id="metric-s-tc">15.6 M K</span>
-                            </div>
-                            <div class="metric-row">
-                                <span class="metric-label">Pressão Nuclear</span>
-                                <span class="metric-value" id="metric-s-pres">1.00 P<sub>&odot;</sub></span>
-                            </div>
-                            <div class="metric-row">
-                                <span class="metric-label">Tempo de Vida Principal</span>
-                                <span class="metric-value" id="metric-s-time">10.0 Bilhões anos</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="control-sidebar">
-                    <div class="panel-header">
-                        <h2>Estrela da Sequência Principal</h2>
-                        <p>Controle as propriedades astrofísicas da estrela.</p>
-                    </div>
-
-                    <div class="control-group">
-                        <h3>Diagrama Hertzsprung-Russell</h3>
-                        <div class="hr-diagram-container">
-                            <canvas id="hr-canvas"></canvas>
-                        </div>
-                        <p style="font-size: 0.65rem; color: var(--text-secondary); text-align: center; margin-top: 4px;">Clique/arraste no gráfico para posicionar a estrela</p>
-                    </div>
-
-                    <div class="control-group" style="border-color: var(--accent-cyan);">
-                        <h3>Estrelas Reais & Objetos Exóticos</h3>
-                        <div class="control-item" style="margin-bottom: 8px; position: relative;">
-                            <label class="control-label" style="font-size: 0.78rem; margin-bottom: 4px; color: var(--accent-cyan);">Pesquise no Banco de Dados Estelar</label>
-                            <input type="text" id="input-s-search" class="num-input" placeholder="Ex: Sirius, Wolf-Rayet..." autocomplete="off" style="width: 100%; text-align: left; padding: 6px 12px; height: auto; border: 1px solid rgba(0, 245, 212, 0.4); background: rgba(0,0,0,0.5);">
-                            <div id="search-suggestions" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: #0a0a14; border: 1px solid rgba(0, 245, 212, 0.4); z-index: 10; max-height: 200px; overflow-y: auto; text-align: left; padding: 5px 0;"></div>
-                            <button id="btn-custom-star" class="btn-secondary" style="width: 100%; margin-top: 5px; font-size: 0.7rem;">Modo Customizado (Habilitar Sliders)</button>
-                        </div>
-                    </div>
-
-                    <div class="control-group">
-                        <h3>Propriedades Físicas</h3>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Massa Inicial (M<sub>&odot;</sub>)</span>
-                            </div>
-                            <div class="control-item-row">
-                                <input type="range" id="slider-s-mass" min="0.1" max="25" step="0.1" value="1.0">
-                                <input type="number" id="num-s-mass" class="num-input" min="0.1" max="25" step="0.1" value="1.0">
-                            </div>
-                        </div>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Temperatura Efetiva (K)</span>
-                            </div>
-                            <div class="control-item-row">
-                                <input type="range" id="slider-s-temp" min="2000" max="40000" step="100" value="5778">
-                                <input type="number" id="num-s-temp" class="num-input" min="2000" max="40000" step="100" value="5778">
-                            </div>
-                        </div>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Luminosidade (L)</span>
-                                <span class="control-value"><span id="val-s-lum">1.00</span> L<sub>&odot;</sub></span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="control-group">
-                        <h3>Monitor de Fusão Nuclear</h3>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Fusão Próton-Próton (p-p)</span>
-                                <span class="control-value" id="val-s-pp">100%</span>
-                            </div>
-                            <div style="background: rgba(255,255,255,0.05); height: 6px; border-radius:3px; overflow:hidden;">
-                                <div id="bar-s-pp" style="background: var(--accent-cyan); height:100%; width:100%; transition: width 0.3s;"></div>
-                            </div>
-                        </div>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Ciclo CNO (Carbono)</span>
-                                <span class="control-value" id="val-s-cno">0%</span>
-                            </div>
-                            <div style="background: rgba(255,255,255,0.05); height: 6px; border-radius:3px; overflow:hidden;">
-                                <div id="bar-s-cno" style="background: var(--accent-purple); height:100%; width:0%; transition: width 0.3s;"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="control-group">
-                        <h3>Estrutura Estelar</h3>
-                        <div class="switch-container">
-                            <div>
-                                <span class="control-label" style="font-size: 0.8rem; color: var(--accent-cyan);">Estrutura Interna 3D</span>
-                                <div class="switch-label-desc">Revela o corte do núcleo e camadas</div>
-                            </div>
-                            <label class="switch">
-                                <input type="checkbox" id="toggle-s-internal">
-                                <span class="slider-switch"></span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="control-group">
-                        <h3>Evolução Estelar</h3>
-                        <button class="btn-primary" id="btn-s-evolve" style="width: 100%;">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-                            Disparar Morte Estelar
-                        </button>
-                        <button class="btn-secondary" id="btn-s-reset" style="width: 100%; margin-top: 8px; border-color: var(--accent-cyan); color: #ffffff; display: none;">
-                            Reiniciar Ciclo Estelar
-                        </button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- 3. SIMULAÇÃO DO BURACO NEGRO -->
-            <section id="tab-blackhole" class="simulation-view">
-                <div class="canvas-container" id="blackhole-canvas-container">
-                    <div class="overlay-info">
-                        <h3>Buraco Negro de Schwarzschild</h3>
-                        <p>Simulação ultra-realista por Raymarching GLSL integrado com as equações geodésicas de deflexão de fótons da Relatividade Geral.</p>
-                        <div class="overlay-metrics">
-                            <div class="metric-row">
-                                <span class="metric-label">Raio de Schwarzschild (Rs)</span>
-                                <span class="metric-value" id="metric-b-rs">29.5 km</span>
-                            </div>
-                            <div class="metric-row">
-                                <span class="metric-label">Esfera de Fótons (Rph)</span>
-                                <span class="metric-value" id="metric-b-rph">44.3 km</span>
-                            </div>
-                            <div class="metric-row">
-                                <span class="metric-label">Órbita Estável Mínima (ISCO)</span>
-                                <span class="metric-value" id="metric-b-isco">88.6 km</span>
-                            </div>
-                            <div class="metric-row">
-                                <span class="metric-label">Dilatação Temporal Grav.</span>
-                                <span class="metric-value" id="metric-b-time">&infin; (no Horiz.)</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="control-sidebar">
-                    <div class="panel-header">
-                        <h2>Horizonte de Eventos</h2>
-                        <p>Modifique a distorção espaço-temporal.</p>
-                    </div>
-
-                    <div class="control-group" style="border-color: var(--accent-purple);">
-                        <h3>Tipo de Singularidade</h3>
-                        <div class="control-item" style="margin-bottom: 8px;">
-                            <label class="control-label" style="font-size: 0.78rem; margin-bottom: 4px; color: var(--accent-purple);">Selecione o Modelo</label>
-                            <select id="select-b-type" class="num-input" style="width: 100%; text-align: left; padding: 6px 12px; height: auto;">
-                                <option value="schwar" selected>Schwarzschild (Estático, Gargantua Clássico)</option>
-                                <option value="kerr">Kerr (Spinning, Frame Dragging Relativístico)</option>
-                                <option value="quasar">Quasar Supermassivo (Active Core + Jatos de Plasma)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="control-group">
-                        <h3>Propriedades do Monstro</h3>
-                        <div class="control-item" id="group-b-spin" style="display: none; margin-bottom: 12px;">
-                            <div class="control-label">
-                                <span style="color: var(--accent-purple);">Spin Relativístico (a)</span>
-                                <span class="control-value"><span id="val-b-spin">0.00</span></span>
-                            </div>
-                            <input type="range" id="slider-b-spin" min="0.0" max="0.99" step="0.01" value="0.00">
-                            <p style="font-size: 0.62rem; color: var(--text-secondary); line-height: 1.2; margin-top: 3px;">
-                                O spin arrasta o próprio tecido do espaço-tempo (Frame Dragging), gerando achatamento e distorção assimétrica extrema.
-                            </p>
-                        </div>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Massa do Buraco Negro (M)</span>
-                                <span class="control-value"><span id="val-b-mass">12</span> M<sub>&odot;</sub></span>
-                            </div>
-                            <input type="range" id="slider-b-mass" min="0.5" max="10.82" step="0.01" value="1.08">
-                        </div>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Taxa de Acreção (Brilho)</span>
-                                <span class="control-value" id="val-b-bright">1.0</span>
-                            </div>
-                            <input type="range" id="slider-b-bright" min="0.1" max="3.0" step="0.1" value="1.0">
-                        </div>
-                    </div>
-
-                    <div class="control-group">
-                        <h3>Distorções Relativísticas</h3>
-                        <div class="switch-container">
-                            <span class="control-label" style="font-size: 0.8rem;">Doppler Beaming (Rotação)</span>
-                            <label class="switch">
-                                <input type="checkbox" id="toggle-b-doppler" checked>
-                                <span class="slider-switch"></span>
-                            </label>
-                        </div>
-                        <div style="font-size: 0.65rem; color: var(--text-secondary); line-height: 1.3; margin-top: 5px;">
-                            Amplifica o brilho da matéria orbitando em nossa direção e atenua no lado oposto devido a efeitos relativísticos.
-                        </div>
-                        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.05); margin: 8px 0;">
-                        <div class="switch-container">
-                            <span class="control-label" style="font-size: 0.8rem;">Redshift Gravitacional</span>
-                            <label class="switch">
-                                <input type="checkbox" id="toggle-b-redshift" checked>
-                                <span class="slider-switch"></span>
-                            </label>
-                        </div>
-                        <div style="font-size: 0.65rem; color: var(--text-secondary); line-height: 1.3; margin-top: 5px;">
-                            Desvia a luz para frequências avermelhadas perto do horizonte devido à perda de energia gravitacional.
-                        </div>
-                    </div>
-
-                    <div class="control-group">
-                        <h3>Câmera e Visualização</h3>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Ângulo de Inclinação</span>
-                                <span class="control-value"><span id="val-b-pitch">15</span>&deg;</span>
-                            </div>
-                            <input type="range" id="slider-b-pitch" min="0" max="80" step="1" value="15">
-                        </div>
-                        <div class="switch-container" style="margin-top: 8px;">
-                            <span class="control-label" style="font-size: 0.8rem;">Lente Gravitacional (Lensing)</span>
-                            <label class="switch">
-                                <input type="checkbox" id="toggle-b-lensing" checked>
-                                <span class="slider-switch"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- 4. PULSAR (MAGNETAR) SIMULATION -->
-            <section id="tab-pulsar" class="simulation-view">
-                <div class="sim-canvas-container" id="pulsar-container">
-                    <div class="overlay-hud">
-                        <div class="hud-box">
-                            <div class="hud-title">FÍSICA DE NÊUTRONS</div>
-                            <div class="hud-metric">
-                                <span class="metric-label">RAIO DO NÚCLEO:</span>
-                                <span class="metric-value" id="metric-p-radius">12.0 km</span>
-                            </div>
-                            <div class="hud-metric">
-                                <span class="metric-label">GRAVIDADE DE SUPERFÍCIE:</span>
-                                <span class="metric-value" id="metric-p-gravity">2.0x10^11 G</span>
-                            </div>
-                            <div class="hud-metric">
-                                <span class="metric-label">ENERGIA CINÉTICA ROTACIONAL:</span>
-                                <span class="metric-value" id="metric-p-energy">1.0x10^42 J</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="sim-controls panel-dark">
-                    <h2>Pulsar / Magnetar</h2>
-                    <p class="panel-desc">Estrela de nêutrons degenerada, girando com campos magnéticos extremos.</p>
-                    
-                    <div class="control-group">
-                        <h3>Parâmetros Físicos</h3>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Massa Remanescente (M⊙)</span>
-                                <input type="number" id="pulsar-mass-num" class="input-num" value="1.4" min="1.1" max="2.1" step="0.1">
-                            </div>
-                            <input type="range" id="pulsar-mass" min="1.1" max="2.1" step="0.1" value="1.4">
-                        </div>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Taxa de Rotação (Hertz)</span>
-                                <input type="number" id="pulsar-spin-num" class="input-num" value="30" min="1" max="716" step="1">
-                            </div>
-                            <input type="range" id="pulsar-spin" min="1" max="716" step="1" value="30">
-                            <div class="input-desc">Pulsar do Caranguejo gira a ~30Hz. O limite de ruptura é ~716Hz.</div>
-                        </div>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Campo Magnético (Tesla)</span>
-                                <input type="number" id="pulsar-mag-num" class="input-num" value="100000000" min="10000" max="100000000000" step="100000">
-                            </div>
-                            <input type="range" id="pulsar-mag" min="10000" max="100000000000" step="10000000" value="100000000">
-                            <div class="input-desc">Acima de 10⁹ Tesla o objeto se comporta como um Magnetar — jatos viram violeta ultravioleta.</div>
-                        </div>
-                    </div>
-
-                    <div class="control-group" style="border-color: rgba(0,245,212,0.25); background: rgba(0,245,212,0.03);">
-                        <h3 style="color: var(--accent-cyan);">Controles da Câmera</h3>
-                        <p style="font-size:0.72rem; color: var(--text-secondary); line-height: 1.5;">
-                            🖱️ <strong>Arrastar</strong> — orbitar ao redor da estrela<br>
-                            🖱️ <strong>Scroll</strong> — zoom in/out<br>
-                            ✨ <strong>Efeito farol:</strong> orbite até alinhar com um jato polar para ver o flash!
-                        </p>
-                    </div>
-                </div>
-            </section>
-
-
-            <!-- ========================================== -->
-            <!-- TAB: SUPERNOVA                             -->
-            <!-- ========================================== -->
-            <section id="tab-supernova" class="simulation-view">
-                    <div id="supernova-container" class="sim-canvas-container">
-                        <!-- Supernova WebGL Render Here -->
-                        <div class="overlay-info">
-                            <h3>Colapso de Núcleo (Core-Collapse)</h3>
-                            <div class="metrics-grid">
-                                <div class="metric">
-                                    <span class="label">Tempo após Colapso</span>
-                                    <span class="value" id="metric-sn-time">0.000 s</span>
-                                </div>
-                                <div class="metric">
-                                    <span class="label">Raio da Expansão</span>
-                                    <span class="value" id="metric-sn-radius">0.00 km</span>
-                                </div>
-                                <div class="metric">
-                                    <span class="label">Velocidade da Ejeção</span>
-                                    <span class="value" id="metric-sn-speed">0 km/s</span>
-                                </div>
-                                <div class="metric">
-                                    <span class="label">Temperatura do Núcleo</span>
-                                    <span class="value" id="metric-sn-temp">0 K</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                <div class="control-sidebar">
-                    <h2>Controle de Evento Cataclísmico</h2>
-                    <p class="panel-desc">Acompanhe a detonação de uma estrela massiva em câmera lenta extrema. A onda de choque expele poeira estelar formando uma nebulosa em tempo real.</p>
-
-                    <div class="control-group">
-                        <h3>1. Parâmetros da Progenitora</h3>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Massa Estelar Inicial (M<sub>☉</sub>)</span>
-                                <span class="value-display" id="sn-mass-num">25.0</span>
-                            </div>
-                            <input type="range" id="sn-mass" min="8" max="150" step="1" value="25">
-                            <div class="input-desc">Determina a força da explosão e a densidade da poeira gerada.</div>
-                        </div>
-                    </div>
-
-                    <div class="control-group" style="border-color: rgba(255,100,50,0.5);">
-                        <h3 style="color: #ff6432;">2. Controle Temporal Extremo</h3>
-                        <div class="control-item">
-                            <div class="control-label">
-                                <span>Escala de Tempo (Time Scale)</span>
-                                <span class="value-display" id="sn-timescale-num" style="color: #00f5d4; font-weight: bold;">1.0000x</span>
-                            </div>
-                            <!-- Logarithmic-like slider using steps -->
-                            <input type="range" id="sn-timescale" min="0" max="6" step="1" value="6">
-                            <div class="input-desc">Use a câmera lenta extrema para ver a luz e a onda de choque rasgando a estrela centímetro por centímetro.</div>
-                            
-                            <!-- Custom scale markers -->
-                            <div style="display: flex; justify-content: space-between; font-size: 0.6rem; color: #666; margin-top: 5px;">
-                                <span>0.00000025x</span>
-                                <span>0.0001x</span>
-                                <span>0.01x</span>
-                                <span>1x</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="control-group" style="border-color: rgba(0,245,212,0.25); background: rgba(0,245,212,0.03);">
-                        <h3 style="color: var(--accent-cyan);">Ação</h3>
-                        <div style="display: flex; gap: 10px; margin-top: 15px;">
-                            <button id="btn-sn-detonate" class="btn-primary" style="flex: 1; font-weight: bold; font-size: 1.1rem;">DETONAR SUPERNOVA</button>
-                            <button id="btn-sn-reset" class="btn-primary" style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2);">RESETAR</button>
-                        </div>
-                        <div style="display: flex; gap: 10px; margin-top: 10px;">
-                            <button id="btn-sn-render-video" class="btn-primary" style="flex: 1; background: linear-gradient(135deg, #ff0055, #ffaa00); border: none;">🎥 RENDERIZAR VÍDEO (RÁPIDO)</button>
-                        </div>
-                        
-                        <!-- Video output container -->
-                        <div id="sn-video-container" style="display: none; margin-top: 20px; text-align: center;">
-                            <h4 style="color: #fff; margin-bottom: 10px;">Vídeo Pré-Calculado</h4>
-                            <video id="sn-video-player" controls autoplay loop style="width: 100%; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;"></video>
-                            <a id="sn-video-download" class="btn-primary" style="display: block; margin-top: 10px; text-align: center; text-decoration: none;">⬇️ Baixar Vídeo</a>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- ========================================== -->
-            <!-- TAB: GALAXY COLLISION                      -->
-            <!-- ========================================== -->
-            <section id="tab-galaxy" class="simulation-view">
-                <div class="sim-canvas-container" id="galaxy-container">
-                    <div class="overlay-info">
-                        <h3>Dinâmica de Interação Galáctica</h3>
-                        <p>Simulação do Problema Restrito de 3 Corpos utilizando 40 mil partículas.</p>
-                        <div class="overlay-metrics">
-                            <div class="metric-row">
-                                <span class="metric-label">Tempo da Simulação (Myr)</span>
-                                <span class="metric-value" id="metric-gx-time">0.00</span>
-                            </div>
-                            <div class="metric-row">
-                                <span class="metric-label">Distância Intergaláctica (kpc)</span>
-                                <span class="metric-value" id="metric-gx-dist">0.00</span>
-                            </div>
-                            <div class="metric-row">
-                                <span class="metric-label">Velocidade Relativa (km/s)</span>
-                                <span class="metric-value" id="metric-gx-vel">0.0</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="control-sidebar">
-                    <h2>Mecânica Celeste de Larga Escala</h2>
-                    <p class="panel-desc">Ajuste a estrutura das galáxias e introduza halos de Matéria Escura invisíveis para ver o verdadeiro poder destruidor das forças de maré.</p>
-                    
-                    <div class="control-group">
-                        <h3>Galáxia A (Via Láctea)</h3>
-                        <div class="slider-container">
-                            <div class="slider-header">
-                                <span class="slider-label">Massa do Núcleo (M⊙ x10⁶)</span>
-                                <span class="slider-value" id="gx-massA-num">4.0</span>
-                            </div>
-                            <input type="range" id="gx-massA" min="0.1" max="10.0" step="0.1" value="4.0">
-                        </div>
-                        
-                        <div class="slider-container">
-                            <div class="slider-header">
-                                <span class="slider-label">Fator de Matéria Escura</span>
-                                <span class="slider-value" id="gx-dmA-num">1.0x</span>
-                            </div>
-                            <input type="range" id="gx-dmA" min="0" max="10" step="0.5" value="1.0">
-                            <div class="input-desc">Aumenta o raio de influência gravitacional.</div>
-                        </div>
-                    </div>
-
-                    <div class="control-group">
-                        <h3>Galáxia B (Andrômeda)</h3>
-                        <div class="slider-container">
-                            <div class="slider-header">
-                                <span class="slider-label">Massa do Núcleo (M⊙ x10⁶)</span>
-                                <span class="slider-value" id="gx-massB-num">6.0</span>
-                            </div>
-                            <input type="range" id="gx-massB" min="0.1" max="10.0" step="0.1" value="6.0">
-                        </div>
-                        
-                        <div class="slider-container">
-                            <div class="slider-header">
-                                <span class="slider-label">Fator de Matéria Escura</span>
-                                <span class="slider-value" id="gx-dmB-num">1.5x</span>
-                            </div>
-                            <input type="range" id="gx-dmB" min="0" max="10" step="0.5" value="1.5">
-                        </div>
-                    </div>
-                    
-                    <div class="control-group">
-                        <h3>Parâmetros de Colisão</h3>
-                        <div class="slider-container">
-                            <div class="slider-header">
-                                <span class="slider-label">Parâmetro de Impacto</span>
-                                <span class="slider-value" id="gx-impact-num">0.5</span>
-                            </div>
-                            <input type="range" id="gx-impact" min="-2.0" max="2.0" step="0.1" value="0.5">
-                            <div class="input-desc">Desvio lateral (0 = colisão totalmente frontal).</div>
-                        </div>
-                    </div>
-
-                    <div class="control-group" style="border-color: rgba(0,245,212,0.25); background: rgba(0,245,212,0.03);">
-                        <h3 style="color: var(--accent-cyan);">Ação</h3>
-                        <div style="display: flex; gap: 10px; margin-top: 15px;">
-                            <button id="btn-gx-start" class="btn-primary" style="flex: 1; font-weight: bold;">INICIAR COLISÃO</button>
-                            <button id="btn-gx-reset" class="btn-primary" style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2);">RESETAR</button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-        </main>
-    </div>
-
-    <!-- Alert Modal para Supernova e Colapsos de Estrela -->
-    <div id="stellar-alert" class="fullscreen-alert">
-        <div class="alert-content">
-            <h2 id="alert-title" class="alert-title supernova">SUPERNOVA!</h2>
-            <p id="alert-desc" class="alert-desc">A estrela de ferro massiva exauriu seu combustível nuclear. Sem suporte de pressão contra a gravidade, o núcleo colapsou em milissegundos, gerando uma onda de choque catastrófica que ejetou o envelope estelar no cosmos.</p>
-            <button class="btn-primary" id="btn-alert-close">RETORNAR AO LABORATÓRIO</button>
+        <!-- Home Page Search Bar -->
+        <div class="neal-search-container">
+            <input type="text" id="neal-home-search" class="neal-search-input" placeholder="Buscar simulação (ex: pulsar, galáxia, órbitas)...">
         </div>
+
+        <main class="neal-grid">
+            <!-- Kepler -->
+            <a href="pages/kepler.html" class="neal-card">
+                <div class="neal-icon neal-icon-orbit">
+                    <div class="orbit-path"></div>
+                    <div class="orbit-planet"></div>
+                    <div class="orbit-sun"></div>
+                </div>
+                <h2>Órbitas</h2>
+            </a>
+
+            <!-- Stellar -->
+            <a href="pages/stellar.html" class="neal-card">
+                <div class="neal-icon neal-icon-star">
+                    <div class="star-core"></div>
+                    <div class="star-pulse"></div>
+                </div>
+                <h2>Ciclo Estelar</h2>
+            </a>
+
+            <!-- Black Hole -->
+            <a href="pages/blackhole.html" class="neal-card">
+                <div class="neal-icon neal-icon-blackhole">
+                    <div class="bh-ring"></div>
+                    <div class="bh-core"></div>
+                </div>
+                <h2>Buracos Negros</h2>
+            </a>
+
+            <!-- Pulsar -->
+            <a href="pages/pulsar.html" class="neal-card">
+                <div class="neal-icon neal-icon-pulsar">
+                    <div class="pulsar-beam"></div>
+                    <div class="pulsar-core"></div>
+                </div>
+                <h2>Pulsar</h2>
+            </a>
+
+            <!-- Supernova -->
+            <a href="pages/supernova.html" class="neal-card">
+                <div class="neal-icon neal-icon-supernova">
+                    <div class="sn-blast"></div>
+                </div>
+                <h2>Supernova</h2>
+            </a>
+
+            <!-- Galaxy -->
+            <a href="pages/galaxy.html" class="neal-card">
+                <div class="neal-icon neal-icon-galaxy">
+                    <div class="gx-spiral"></div>
+                    <div class="gx-spiral-2"></div>
+                </div>
+                <h2>Galáxias</h2>
+            </a>
+        </main>
+        
+        <footer class="neal-footer">
+            <p>Desenvolvido para exploração astrofísica educacional. &copy; 2026 Physics Box.</p>
+        </footer>
     </div>
 
-    <!-- Script Principal -->
+    <!-- Minimal JS to init starfield only for home -->
     <script src="js/main.js"></script>
-    <!-- Módulos de Simulação -->
-    <script src="js/kepler.js"></script>
-    <script src="js/stellar.js"></script>
-    <script src="js/blackhole.js"></script>
-    <script src="js/pulsar.js"></script>
-    <script src="js/supernova.js"></script>
-    <script src="js/galaxy.js"></script>
 </body>
 </html>

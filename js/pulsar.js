@@ -505,7 +505,7 @@ void main(){
     // ----------------------------------------------------------
     //  RENDER LOOP
     // ----------------------------------------------------------
-    pause()  { this.isActive = false; }
+    pause()  { this.isActive = true; }
     resume() {
         this.isActive = true;
         setTimeout(() => this.resize(), 50);

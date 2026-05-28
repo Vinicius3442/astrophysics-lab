@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laboratório de Astrofísica Avançado | Simulação Física Real</title>
+    <link rel="stylesheet" href="../style.css">
+    <!-- Three.js CDN (Paired unpkg releases) -->
+    <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+    <!-- Three.js OrbitControls -->
+    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <!-- Fundo espacial e estrelas dinâmicas -->
+    <div id="space-bg"></div>
+    <canvas id="starfield-canvas"></canvas>
+
+    <div class="app-container">
+        <!-- Barra superior de Navegação -->
+        <header>
+            <a href="../index.html" class="logo-section" id="btn-home" style="cursor: pointer; text-decoration: none;" title="Voltar ao Menu Principal">
+                <div class="logo-icon"></div>
+                <h1>PHYSICS BOX</h1>
+            </a>
+            
+            <div class="search-bar">
+                <input type="text" id="sim-search" placeholder="Buscar simulação (ex: pulsar, buraco negro)...">
+            </div>
+
+            <div class="system-status">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span>MOTOR DE FÍSICA: ATIVO</span>
+                </div>
+                <span>FPS: <span id="fps-counter">60</span></span>
+            </div>
+        </header>
+
+        <!-- Área Principal de Simulação -->
+        <main>
+<section id="tab-kepler" class="simulation-view active">
+                <div class="canvas-container" id="kepler-canvas-container">
+                    <div class="overlay-info">
+                        <h3>Órbita Kepleriana</h3>
+                        <p>Simulação realista das Leis de Kepler baseada na resolução numérica da Equação de Kepler por Newton-Raphson.</p>
+                        <div class="overlay-metrics">
+                            <div class="metric-row">
+                                <span class="metric-label">Anomalia Média (M)</span>
+                                <span class="metric-value" id="metric-k-m">0.00 rad</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">Anomalia Excêntrica (E)</span>
+                                <span class="metric-value" id="metric-k-e">0.00 rad</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">Velocidade Orbital (v)</span>
+                                <span class="metric-value" id="metric-k-v">29.78 km/s</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">Distância Orbital (r)</span>
+                                <span class="metric-value" id="metric-k-r">1.00 UA</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-sidebar">
+                    <div class="panel-header">
+                        <h2>Mecânica Orbital</h2>
+                        <p>Ajuste os parâmetros da órbita do planeta.</p>
+                    </div>
+                    
+                    <!-- Seletor de Leis (Sub-abas) -->
+                    <div class="control-group" style="border-color: var(--accent-blue);">
+                        <h3>Módulos de Estudo (3 Leis)</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;">
+                            <button class="btn-secondary active" id="btn-k-law1" style="font-size: 0.65rem; padding: 8px 0; text-align: center; font-weight:700;">1ª LEI</button>
+                            <button class="btn-secondary" id="btn-k-law2" style="font-size: 0.65rem; padding: 8px 0; text-align: center; font-weight:700;">2ª LEI</button>
+                            <button class="btn-secondary" id="btn-k-law3" style="font-size: 0.65rem; padding: 8px 0; text-align: center; font-weight:700;">3ª LEI</button>
+                        </div>
+                    </div>
+
+                    <!-- Módulo 1ª Lei: Geometria -->
+                    <div class="control-group" id="group-k-law1">
+                        <h3>Geometria da Órbita (1ª Lei)</h3>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Semi-eixo Maior (a)</span>
+                                <span class="control-value"><span id="val-k-a">1.00</span> UA</span>
+                            </div>
+                            <input type="range" id="slider-k-a" min="0.4" max="5.0" step="0.1" value="1.0">
+                        </div>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Excentricidade (e)</span>
+                                <span class="control-value" id="val-k-ecc">0.02</span>
+                            </div>
+                            <input type="range" id="slider-k-ecc" min="0.0" max="0.9" step="0.01" value="0.02">
+                        </div>
+                        <p style="font-size:0.65rem; color:var(--text-secondary); line-height:1.3; margin-top:5px;">
+                            Exibe a trajetória elíptica com a estrela no foco principal e um marcador geométrico sutil no foco secundário vazio.
+                        </p>
+                    </div>
+
+                    <!-- Módulo 2ª Lei: Áreas -->
+                    <div class="control-group" id="group-k-law2" style="display: none;">
+                        <h3>Lei das Áreas (2ª Lei)</h3>
+                        <div class="switch-container">
+                            <span class="control-label" style="font-size: 0.8rem;">Visualizar Áreas Orbitais</span>
+                            <label class="switch">
+                                <input type="checkbox" id="toggle-k-areas" checked>
+                                <span class="slider-switch"></span>
+                            </label>
+                        </div>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Intervalo de Tempo (&Delta;t)</span>
+                                <span class="control-value"><span id="val-k-dt">2.0</span> meses</span>
+                            </div>
+                            <input type="range" id="slider-k-dt" min="0.5" max="4.0" step="0.1" value="2.0">
+                        </div>
+                        <div class="kepler-legend">
+                            <div class="legend-item">
+                                <span class="legend-color" style="background: rgba(0, 245, 212, 0.4);"></span>
+                                <span>Área Varrida A₁ = A₂</span>
+                            </div>
+                        </div>
+                        <p style="font-size:0.65rem; color:var(--text-secondary); line-height:1.3; margin-top:5px;">
+                            O planeta varre áreas iguais em tempos iguais. Vetores exibem a Velocidade Tangencial (<span style="color:var(--accent-cyan); font-weight:600;">Ciano</span>) e a Força Gravitacional (<span style="color:var(--accent-red); font-weight:600;">Vermelho</span>).
+                        </p>
+                    </div>
+
+                    <!-- Módulo 3ª Lei: Períodos -->
+                    <div class="control-group" id="group-k-law3" style="display: none;">
+                        <h3>Lei dos Períodos (3ª Lei)</h3>
+                        <div style="background: rgba(0,0,0,0.5); border: 1px solid var(--accent-cyan); border-radius: 4px; padding: 10px; margin-bottom: 10px;">
+                            <canvas id="kepler-graph-canvas" width="300" height="150" style="width: 100%; height: 120px;"></canvas>
+                        </div>
+                        <div class="control-item" style="margin-bottom: 8px;">
+                            <label class="control-label" style="font-size: 0.78rem; margin-bottom: 4px; color: var(--accent-blue);">Carregar Planeta Real</label>
+                            <select id="select-k-planet" class="num-input" style="width: 100%; text-align: left; padding: 6px 12px; height: auto;">
+                                <option value="custom">-- Customizado (Use sliders) --</option>
+                                <option value="mercury">Mercúrio (a = 0.39 UA, e = 0.206)</option>
+                                <option value="venus">Vênus (a = 0.72 UA, e = 0.007)</option>
+                                <option value="earth" selected>Terra (a = 1.00 UA, e = 0.017)</option>
+                                <option value="mars">Marte (a = 1.52 UA, e = 0.093)</option>
+                                <option value="jupiter">Júpiter (a = 5.20 UA, e = 0.048)</option>
+                                <option value="saturn">Saturno (a = 9.58 UA, e = 0.054)</option>
+                            </select>
+                        </div>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Massa da Estrela (M)</span>
+                                <span class="control-value"><span id="val-k-mstar">1.0</span> M<sub>&odot;</sub></span>
+                            </div>
+                            <input type="range" id="slider-k-mstar" min="0.2" max="3.0" step="0.1" value="1.0">
+                        </div>
+                        <div class="formula-card" id="formula-3rd-law">T² = a³ / M_estrela
+T = 1.00 anos | T² = 1.00
+a³ = 1.00 | Razão T²/a³ = 1.000</div>
+                    </div>
+
+                    <!-- Controles Comuns -->
+                    <div class="control-group">
+                        <h3>Controle de Simulação</h3>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Velocidade de Execução</span>
+                            </div>
+                            <input type="range" id="slider-k-speed" min="0" max="5" step="0.2" value="1">
+                        </div>
+                        <button class="btn-secondary" id="btn-k-reset" style="width: 100%;">Reiniciar Planeta</button>
+                    </div>
+                </div>
+            </section>
+</main>
+    </div>
+
+    <!-- Alert Modal para Supernova e Colapsos de Estrela -->
+    <div id="stellar-alert" class="fullscreen-alert">
+        <div class="alert-content">
+            <h2 id="alert-title" class="alert-title supernova">SUPERNOVA!</h2>
+            <p id="alert-desc" class="alert-desc">A estrela de ferro massiva exauriu seu combustível nuclear. Sem suporte de pressão contra a gravidade, o núcleo colapsou em milissegundos, gerando uma onda de choque catastrófica que ejetou o envelope estelar no cosmos.</p>
+            <button class="btn-primary" id="btn-alert-close">RETORNAR AO LABORATÓRIO</button>
+        </div>
+    </div>
+
+    <!-- Script Principal -->
+    <script src="../js/main.js"></script>
+    <!-- Módulos de Simulação -->
+    <script src="../js/kepler.js"></script>
+</body>
+</html>

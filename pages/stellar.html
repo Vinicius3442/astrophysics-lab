@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laboratório de Astrofísica Avançado | Simulação Física Real</title>
+    <link rel="stylesheet" href="../style.css">
+    <!-- Three.js CDN (Paired unpkg releases) -->
+    <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+    <!-- Three.js OrbitControls -->
+    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Three.js PostProcessing (Cinematic Bloom) -->
+    <script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+</head>
+<body>
+
+    <!-- Fundo espacial e estrelas dinâmicas -->
+    <div id="space-bg"></div>
+    <canvas id="starfield-canvas"></canvas>
+
+    <div class="app-container">
+        <!-- Barra superior de Navegação -->
+        <header>
+            <a href="../index.html" class="logo-section" id="btn-home" style="cursor: pointer; text-decoration: none;" title="Voltar ao Menu Principal">
+                <div class="logo-icon"></div>
+                <h1>PHYSICS BOX</h1>
+            </a>
+            
+            <div class="search-bar">
+                <input type="text" id="sim-search" placeholder="Buscar simulação (ex: pulsar, buraco negro)...">
+            </div>
+
+            <div class="system-status">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span>MOTOR DE FÍSICA: ATIVO</span>
+                </div>
+                <span>FPS: <span id="fps-counter">60</span></span>
+            </div>
+        </header>
+
+        <!-- Área Principal de Simulação -->
+        <main>
+<section id="tab-stellar" class="simulation-view active">
+                <div class="canvas-container" id="stellar-canvas-container">
+                    <div class="overlay-info">
+                        <h3>Ciclo de Vida Estelar</h3>
+                        <p>Simulador termodinâmico de nucleossíntese estelar e equilíbrio hidrostático.</p>
+                        <div class="overlay-metrics">
+                            <div class="metric-row">
+                                <span class="metric-label">Raio Estelar (R)</span>
+                                <span class="metric-value" id="metric-s-r">1.00 R<sub>&odot;</sub></span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">Classificação</span>
+                                <span class="metric-value" id="metric-s-class" style="color: var(--accent-cyan); font-weight: bold;">Anã Amarela (G2V)</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">Temperatura Central (Tc)</span>
+                                <span class="metric-value" id="metric-s-tc">15.6 M K</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">Pressão Nuclear</span>
+                                <span class="metric-value" id="metric-s-pres">1.00 P<sub>&odot;</sub></span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">Tempo de Vida Principal</span>
+                                <span class="metric-value" id="metric-s-time">10.0 Bilhões anos</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-sidebar">
+                    <div class="panel-header">
+                        <h2>Estrela da Sequência Principal</h2>
+                        <p>Controle as propriedades astrofísicas da estrela.</p>
+                    </div>
+
+                    <div class="control-group">
+                        <h3>Diagrama Hertzsprung-Russell</h3>
+                        <div class="hr-diagram-container">
+                            <canvas id="hr-canvas"></canvas>
+                        </div>
+                        <p style="font-size: 0.65rem; color: var(--text-secondary); text-align: center; margin-top: 4px;">Clique/arraste no gráfico para posicionar a estrela</p>
+                    </div>
+
+                    <div class="control-group" style="border-color: var(--accent-cyan);">
+                        <h3>Estrelas Reais & Objetos Exóticos</h3>
+                        <div class="control-item" style="margin-bottom: 8px; position: relative;">
+                            <label class="control-label" style="font-size: 0.78rem; margin-bottom: 4px; color: var(--accent-cyan);">Pesquise no Banco de Dados Estelar</label>
+                            <select id="select-s-preset" class="num-input" style="width: 100%; margin-bottom: 5px;">
+                                <option value="sun">Sol (Anã Amarela)</option>
+                                <option value="siriusA">Sirius A (Estrela de Sequência Principal A)</option>
+                                <option value="siriusB">Sirius B (Anã Branca)</option>
+                                <option value="betelgeuse">Betelgeuse (Supergigante Vermelha)</option>
+                                <option value="rigel">Rigel (Supergigante Azul)</option>
+                                <option value="stephenson">Stephenson 2-18 (Hipergigante Vermelha)</option>
+                                <option value="vy_canis">VY Canis Majoris</option>
+                                <option value="uy_scuti">UY Scuti</option>
+                                <option value="proxima">Proxima Centauri (Anã Vermelha)</option>
+                            </select>
+                            <input type="text" id="input-s-search" class="num-input" placeholder="Ex: Sirius, Wolf-Rayet..." autocomplete="off" style="width: 100%; text-align: left; padding: 6px 12px; height: auto; border: 1px solid rgba(0, 245, 212, 0.4); background: rgba(0,0,0,0.5);">
+                            <div id="search-suggestions" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: #0a0a14; border: 1px solid rgba(0, 245, 212, 0.4); z-index: 10; max-height: 200px; overflow-y: auto; text-align: left; padding: 5px 0;"></div>
+                            <button id="btn-custom-star" class="btn-secondary" style="width: 100%; margin-top: 5px; font-size: 0.7rem;">Modo Customizado (Habilitar Sliders)</button>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <h3>Propriedades Físicas</h3>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Massa Inicial (M<sub>&odot;</sub>)</span>
+                            </div>
+                            <div class="control-item-row">
+                                <input type="range" id="slider-s-mass" min="0.1" max="25" step="0.1" value="1.0">
+                                <input type="number" id="num-s-mass" class="num-input" min="0.1" max="25" step="0.1" value="1.0">
+                            </div>
+                        </div>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Temperatura Efetiva (K)</span>
+                            </div>
+                            <div class="control-item-row">
+                                <input type="range" id="slider-s-temp" min="2000" max="40000" step="100" value="5778">
+                                <input type="number" id="num-s-temp" class="num-input" min="2000" max="40000" step="100" value="5778">
+                            </div>
+                        </div>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Luminosidade (L)</span>
+                                <span class="control-value"><span id="val-s-lum">1.00</span> L<sub>&odot;</sub></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <h3>Monitor de Fusão Nuclear</h3>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Fusão Próton-Próton (p-p)</span>
+                                <span class="control-value" id="val-s-pp">100%</span>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.05); height: 6px; border-radius:3px; overflow:hidden;">
+                                <div id="bar-s-pp" style="background: var(--accent-cyan); height:100%; width:100%; transition: width 0.3s;"></div>
+                            </div>
+                        </div>
+                        <div class="control-item">
+                            <div class="control-label">
+                                <span>Ciclo CNO (Carbono)</span>
+                                <span class="control-value" id="val-s-cno">0%</span>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.05); height: 6px; border-radius:3px; overflow:hidden;">
+                                <div id="bar-s-cno" style="background: var(--accent-purple); height:100%; width:0%; transition: width 0.3s;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <h3>Estrutura Estelar</h3>
+                        <div class="switch-container">
+                            <div>
+                                <span class="control-label" style="font-size: 0.8rem; color: var(--accent-cyan);">Estrutura Interna 3D</span>
+                                <div class="switch-label-desc">Revela o corte do núcleo e camadas</div>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="toggle-s-internal">
+                                <span class="slider-switch"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <h3>Evolução Estelar</h3>
+                        <button class="btn-primary" id="btn-s-evolve" style="width: 100%;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                            Disparar Morte Estelar
+                        </button>
+                        <button class="btn-secondary" id="btn-s-reset" style="width: 100%; margin-top: 8px; border-color: var(--accent-cyan); color: #ffffff; display: none;">
+                            Reiniciar Ciclo Estelar
+                        </button>
+                    </div>
+                </div>
+            </section>
+</main>
+    </div>
+
+    <!-- Alert Modal para Supernova e Colapsos de Estrela -->
+    <div id="stellar-alert" class="fullscreen-alert">
+        <div class="alert-content">
+            <h2 id="alert-title" class="alert-title supernova">SUPERNOVA!</h2>
+            <p id="alert-desc" class="alert-desc">A estrela de ferro massiva exauriu seu combustível nuclear. Sem suporte de pressão contra a gravidade, o núcleo colapsou em milissegundos, gerando uma onda de choque catastrófica que ejetou o envelope estelar no cosmos.</p>
+            <button class="btn-primary" id="btn-alert-close">RETORNAR AO LABORATÓRIO</button>
+        </div>
+    </div>
+
+    <!-- Script Principal -->
+    <script src="../js/main.js"></script>
+    <!-- Módulos de Simulação -->
+    <script src="../js/stellar.js"></script>
+</body>
+</html>

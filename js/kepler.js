@@ -4,7 +4,7 @@
 class KeplerSimulation {
     constructor() {
         this.container = document.getElementById("kepler-canvas-container");
-        this.isActive = false;
+        this.isActive = true;
         
         // Physics parameters (Standardized units where G=1, M=1, a=1 => T = 2*pi)
         this.a = 1.0;          // Semi-major axis (AU)
@@ -83,16 +83,22 @@ class KeplerSimulation {
             // Adjust ThreeJS visuals dynamically based on active sub-law study module
             if (lawNum === 1) {
                 this.focusRing.visible = true;
+                this.axisGroup.visible = true;
+                this.areaLabel.style.display = 'none';
                 this.velArrow.visible = false;
                 this.gravArrow.visible = false;
                 this.wedgesGroup.visible = false;
             } else if (lawNum === 2) {
                 this.focusRing.visible = false;
+                this.axisGroup.visible = false;
+                this.areaLabel.style.display = this.showAreas ? 'block' : 'none';
                 this.velArrow.visible = true;
                 this.gravArrow.visible = true;
                 this.wedgesGroup.visible = this.showAreas;
             } else if (lawNum === 3) {
                 this.focusRing.visible = false;
+                this.axisGroup.visible = false;
+                this.areaLabel.style.display = 'none';
                 this.velArrow.visible = false;
                 this.gravArrow.visible = false;
                 this.wedgesGroup.visible = false;
@@ -314,6 +320,40 @@ class KeplerSimulation {
         this.focusRing.rotation.x = Math.PI / 2;
         this.scene.add(this.focusRing);
 
+        // Major and Minor Axes (1st Law)
+        this.axisGroup = new THREE.Group();
+        const axisMat = new THREE.LineDashedMaterial({ color: 0x00d2ff, dashSize: 0.1, gapSize: 0.05, opacity: 0.5, transparent: true });
+        
+        this.majorAxisGeo = new THREE.BufferGeometry();
+        this.majorAxisLine = new THREE.Line(this.majorAxisGeo, axisMat);
+        this.axisGroup.add(this.majorAxisLine);
+
+        this.minorAxisGeo = new THREE.BufferGeometry();
+        this.minorAxisLine = new THREE.Line(this.minorAxisGeo, axisMat);
+        this.axisGroup.add(this.minorAxisLine);
+        
+        this.scene.add(this.axisGroup);
+        
+        // HTML Area Label (2nd Law)
+        this.areaLabel = document.createElement('div');
+        this.areaLabel.style.position = 'absolute';
+        this.areaLabel.style.color = '#fff';
+        this.areaLabel.style.fontFamily = 'monospace';
+        this.areaLabel.style.fontSize = '11px';
+        this.areaLabel.style.background = 'rgba(0, 245, 212, 0.2)';
+        this.areaLabel.style.border = '1px solid #00f5d4';
+        this.areaLabel.style.padding = '2px 4px';
+        this.areaLabel.style.borderRadius = '3px';
+        this.areaLabel.style.pointerEvents = 'none';
+        this.areaLabel.style.transform = 'translate(-50%, -50%)';
+        this.areaLabel.style.display = 'none';
+        this.areaLabel.style.zIndex = '10';
+        this.container.appendChild(this.areaLabel);
+        
+        // 3rd Law Graph state
+        this.graphHistory = [];
+
+
         // Wedge tracker for the Second Law
         this.areaWedges = [];
         this.lastWedgeTime = 0;
@@ -361,6 +401,23 @@ class KeplerSimulation {
         }
 
         this.orbitPathGeo.setFromPoints(points);
+        
+        // Update Axes Geometry
+        const bLine = this.a * Math.sqrt(1 - this.ecc * this.ecc) * this.scale;
+        const aLine = this.a * this.scale;
+        
+        this.majorAxisGeo.setFromPoints([
+            new THREE.Vector3(this.centerX - aLine, 0, 0),
+            new THREE.Vector3(this.centerX + aLine, 0, 0)
+        ]);
+        this.majorAxisLine.computeLineDistances();
+        
+        this.minorAxisGeo.setFromPoints([
+            new THREE.Vector3(this.centerX, 0, -bLine),
+            new THREE.Vector3(this.centerX, 0, bLine)
+        ]);
+        this.minorAxisLine.computeLineDistances();
+        
         this.clearWedges();
     }
 
@@ -462,7 +519,7 @@ class KeplerSimulation {
     }
 
     pause() {
-        this.isActive = false;
+        this.isActive = true;
     }
 
     resume() {
@@ -557,6 +614,106 @@ class KeplerSimulation {
             if (this.t - this.lastWedgeTime >= dtWedgeRad) {
                 this.addAreaWedge(this.lastWedgeTime, this.t);
                 this.lastWedgeTime = this.t;
+            }
+        }
+
+        // 5.5 Update HTML Label Position for newest wedge
+        if (this.showAreas && this.areaWedges.length > 0 && window.AstrophysicsLab.activeTab === 'kepler' && this.groupLaw2.style.display !== 'none') {
+            const lastWedge = this.areaWedges[this.areaWedges.length - 1];
+            // Midpoint of the wedge
+            const tMid = (lastWedge.tStart + lastWedge.tEnd) / 2;
+            const EMid = this.solveKepler(tMid, this.ecc);
+            const midX = this.centerX + this.a * Math.cos(EMid) * this.scale;
+            const midZ = b * Math.sin(EMid) * this.scale;
+            
+            // Project to 2D screen space
+            const vector = new THREE.Vector3(midX * 0.5, 0, midZ * 0.5); // Place label halfway to the planet
+            vector.project(this.camera);
+            
+            const x = (vector.x * .5 + .5) * this.container.clientWidth;
+            const y = (vector.y * -.5 + .5) * this.container.clientHeight;
+            
+            // Calculate theoretical area speed dA/dt = L / (2m)
+            const areaSpeed = Math.sqrt(this.mStar * this.a * (1 - this.ecc*this.ecc)) / 2;
+            const area = areaSpeed * (this.dtWedgeMonths / 12 * Math.PI * 2);
+            
+            this.areaLabel.style.display = 'block';
+            this.areaLabel.style.left = x + 'px';
+            this.areaLabel.style.top = y + 'px';
+            this.areaLabel.innerText = "A = " + area.toFixed(3);
+        } else {
+            if(this.areaLabel) this.areaLabel.style.display = 'none';
+        }
+        
+        // 5.6 Draw T^2 vs a^3 graph if active
+        if (this.groupLaw3.style.display !== 'none') {
+            const canvas = document.getElementById("kepler-graph-canvas");
+            if (canvas) {
+                const ctx = canvas.getContext("2d");
+                
+                const rect = canvas.parentElement.getBoundingClientRect();
+                if(rect.width > 0 && canvas.width !== rect.width * 2) {
+                    canvas.width = rect.width * 2;
+                    canvas.height = rect.height * 2;
+                }
+                const w = canvas.width;
+                const h = canvas.height;
+                if(w === 0) return;
+                
+                ctx.save();
+                ctx.scale(2, 2);
+                const drawW = w / 2;
+                const drawH = h / 2;
+                ctx.clearRect(0, 0, drawW, drawH);
+                
+                // Draw axes
+                ctx.strokeStyle = "rgba(255,255,255,0.2)";
+                ctx.beginPath();
+                ctx.moveTo(30, 10); ctx.lineTo(30, drawH-20); // Y axis (T^2)
+                ctx.lineTo(drawW-10, drawH-20); // X axis (a^3)
+                ctx.stroke();
+                ctx.fillStyle = "rgba(255,255,255,0.5)";
+                ctx.font = "10px sans-serif";
+                ctx.fillText("a³", drawW-20, drawH-5);
+                ctx.fillText("T²", 10, 20);
+                
+                // Add current point to history if not there
+                const aCubed = Math.pow(this.a, 3);
+                const tSquared = aCubed / this.mStar;
+                
+                let found = false;
+                for(let p of this.graphHistory) {
+                    if (Math.abs(p.a3 - aCubed) < 0.1) { found = true; break; }
+                ctx.restore();
+                }
+                if (!found) this.graphHistory.push({a3: aCubed, t2: tSquared});
+                
+                // Draw points and line
+                const maxA3 = Math.max(10, ...this.graphHistory.map(p=>p.a3));
+                const maxT2 = Math.max(10, ...this.graphHistory.map(p=>p.t2));
+                
+                ctx.strokeStyle = "#00d2ff";
+                ctx.beginPath();
+                ctx.moveTo(30, h-20);
+                
+                this.graphHistory.sort((A,B)=>A.a3-B.a3).forEach(p => {
+                    const px = 30 + (p.a3 / maxA3) * (w - 50);
+                    const py = (h - 20) - (p.t2 / maxT2) * (h - 40);
+                    ctx.lineTo(px, py);
+                    ctx.fillStyle = "#ff2a6d";
+                    ctx.beginPath();
+                    ctx.arc(px, py, 3, 0, Math.PI*2);
+                    ctx.fill();
+                });
+                ctx.stroke();
+                
+                // Draw current floating point
+                const cx = 30 + (aCubed / maxA3) * (w - 50);
+                const cy = (h - 20) - (tSquared / maxT2) * (h - 40);
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.arc(cx, cy, 5, 0, Math.PI*2);
+                ctx.fill();
             }
         }
 

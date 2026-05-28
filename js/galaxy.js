@@ -30,7 +30,7 @@ class GalaxySimulation {
         this.metricVel  = document.getElementById("metric-gx-vel");
 
         // State
-        this.isActive = false;
+        this.isActive = true;
         this.isRunning = false;
         
         // Physics constants (abstract units)
@@ -301,7 +301,7 @@ class GalaxySimulation {
         this.renderer.setSize(w, h);
     }
 
-    pause()  { this.isActive = false; }
+    pause()  { this.isActive = true; }
     resume() {
         this.isActive = true;
         setTimeout(() => this.resize(), 50);

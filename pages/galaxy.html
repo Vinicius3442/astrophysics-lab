@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laboratório de Astrofísica Avançado | Simulação Física Real</title>
+    <link rel="stylesheet" href="../style.css">
+    <!-- Three.js CDN (Paired unpkg releases) -->
+    <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+    <!-- Three.js OrbitControls -->
+    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <!-- Fundo espacial e estrelas dinâmicas -->
+    <div id="space-bg"></div>
+    <canvas id="starfield-canvas"></canvas>
+
+    <div class="app-container">
+        <!-- Barra superior de Navegação -->
+        <header>
+            <a href="../index.html" class="logo-section" id="btn-home" style="cursor: pointer; text-decoration: none;" title="Voltar ao Menu Principal">
+                <div class="logo-icon"></div>
+                <h1>PHYSICS BOX</h1>
+            </a>
+            
+            <div class="search-bar">
+                <input type="text" id="sim-search" placeholder="Buscar simulação (ex: pulsar, buraco negro)...">
+            </div>
+
+            <div class="system-status">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span>MOTOR DE FÍSICA: ATIVO</span>
+                </div>
+                <span>FPS: <span id="fps-counter">60</span></span>
+            </div>
+        </header>
+
+        <!-- Área Principal de Simulação -->
+        <main>
+<section id="tab-galaxy" class="simulation-view active">
+                <div class="sim-canvas-container" id="galaxy-container">
+                    <div class="overlay-info">
+                        <h3>Dinâmica de Interação Galáctica</h3>
+                        <p>Simulação do Problema Restrito de 3 Corpos utilizando 40 mil partículas.</p>
+                        <div class="overlay-metrics">
+                            <div class="metric-row">
+                                <span class="metric-label">Tempo da Simulação (Myr)</span>
+                                <span class="metric-value" id="metric-gx-time">0.00</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">Distância Intergaláctica (kpc)</span>
+                                <span class="metric-value" id="metric-gx-dist">0.00</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-label">Velocidade Relativa (km/s)</span>
+                                <span class="metric-value" id="metric-gx-vel">0.0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-sidebar">
+                    <h2>Mecânica Celeste de Larga Escala</h2>
+                    <p class="panel-desc">Ajuste a estrutura das galáxias e introduza halos de Matéria Escura invisíveis para ver o verdadeiro poder destruidor das forças de maré.</p>
+                    
+                    <div class="control-group">
+                        <h3>Galáxia A (Via Láctea)</h3>
+                        <div class="slider-container">
+                            <div class="slider-header">
+                                <span class="slider-label">Massa do Núcleo (M⊙ x10⁶)</span>
+                                <span class="slider-value" id="gx-massA-num">4.0</span>
+                            </div>
+                            <input type="range" id="gx-massA" min="0.1" max="10.0" step="0.1" value="4.0">
+                        </div>
+                        
+                        <div class="slider-container">
+                            <div class="slider-header">
+                                <span class="slider-label">Fator de Matéria Escura</span>
+                                <span class="slider-value" id="gx-dmA-num">1.0x</span>
+                            </div>
+                            <input type="range" id="gx-dmA" min="0" max="10" step="0.5" value="1.0">
+                            <div class="input-desc">Aumenta o raio de influência gravitacional.</div>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <h3>Galáxia B (Andrômeda)</h3>
+                        <div class="slider-container">
+                            <div class="slider-header">
+                                <span class="slider-label">Massa do Núcleo (M⊙ x10⁶)</span>
+                                <span class="slider-value" id="gx-massB-num">6.0</span>
+                            </div>
+                            <input type="range" id="gx-massB" min="0.1" max="10.0" step="0.1" value="6.0">
+                        </div>
+                        
+                        <div class="slider-container">
+                            <div class="slider-header">
+                                <span class="slider-label">Fator de Matéria Escura</span>
+                                <span class="slider-value" id="gx-dmB-num">1.5x</span>
+                            </div>
+                            <input type="range" id="gx-dmB" min="0" max="10" step="0.5" value="1.5">
+                        </div>
+                    </div>
+                    
+                    <div class="control-group">
+                        <h3>Parâmetros de Colisão</h3>
+                        <div class="slider-container">
+                            <div class="slider-header">
+                                <span class="slider-label">Parâmetro de Impacto</span>
+                                <span class="slider-value" id="gx-impact-num">0.5</span>
+                            </div>
+                            <input type="range" id="gx-impact" min="-2.0" max="2.0" step="0.1" value="0.5">
+                            <div class="input-desc">Desvio lateral (0 = colisão totalmente frontal).</div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" style="border-color: rgba(0,245,212,0.25); background: rgba(0,245,212,0.03);">
+                        <h3 style="color: var(--accent-cyan);">Ação</h3>
+                        <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <button id="btn-gx-start" class="btn-primary" style="flex: 1; font-weight: bold;">INICIAR COLISÃO</button>
+                            <button id="btn-gx-reset" class="btn-primary" style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2);">RESETAR</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+</main>
+    </div>
+
+    <!-- Alert Modal para Supernova e Colapsos de Estrela -->
+    <div id="stellar-alert" class="fullscreen-alert">
+        <div class="alert-content">
+            <h2 id="alert-title" class="alert-title supernova">SUPERNOVA!</h2>
+            <p id="alert-desc" class="alert-desc">A estrela de ferro massiva exauriu seu combustível nuclear. Sem suporte de pressão contra a gravidade, o núcleo colapsou em milissegundos, gerando uma onda de choque catastrófica que ejetou o envelope estelar no cosmos.</p>
+            <button class="btn-primary" id="btn-alert-close">RETORNAR AO LABORATÓRIO</button>
+        </div>
+    </div>
+
+    <!-- Script Principal -->
+    <script src="../js/main.js"></script>
+    <!-- Módulos de Simulação -->
+    <script src="../js/galaxy.js"></script>
+</body>
+</html>

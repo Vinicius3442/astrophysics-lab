@@ -98,7 +98,7 @@ class BlackHoleSimulation {
         `;
 
         const fs = `
-            
+            precision highp float;
 
             uniform vec2  u_resolution;
             uniform float u_time;
@@ -288,8 +288,6 @@ class BlackHoleSimulation {
         const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.shaderMat);
         this.scene.add(quad);
 
-        // Force a delayed resize to ensure layout is computed
-        setTimeout(() => this.resize(), 100);
         window.addEventListener("resize", () => this.resize());
     }
 
@@ -427,7 +425,7 @@ class BlackHoleSimulation {
         this.renderer.render(this.scene, this.virtualCamera); // The Orthographic camera is replaced by rendering the quad directly. Wait, no.
         // Wait, to render a full-screen quad using ShaderMaterial, we just need ANY camera, 
         // the vertex shader completely bypasses the projection matrices.
-        // gl_Position = vec4(position, 1.0);
+        // `gl_Position = vec4(position, 1.0);`
         // So rendering with virtualCamera is perfectly fine and avoids needing a dual scene setup.
     }
 }

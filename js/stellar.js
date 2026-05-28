@@ -1,12 +1,8 @@
 // ASTROPHYSICS LAB - STELLAR SIMULATION (js/stellar.js)
-// Física Estelar Avançada: Estrutura Interna 3D (Corte Transversal), Fusão de Prótons (p-p) e Elementos (CNO) no Núcleo, Correntes Convectivas Toroidais e Remanescentes Interativos (Anã Branca/Neutron/Buraco Negro).
-// Física Estelar Avançada: Estrutura Interna 3D (Corte Transversal), Fusão de Prótons (p-p) e Elementos (CNO) no Núcleo e Correntes Convectivas Toroidais.
-// Física Estelar Avançada: Fusão Termonuclear p-p e CNO, Diagrama H-R interativo e Evolução de Gigantes Vermelhas, Anãs Brancas e Supernovas de Colapso de Núcleo.
-
 class StellarSimulation {
     constructor() {
         this.container = document.getElementById("stellar-canvas-container");
-        this.isActive = false; // Starts inactive until tab switch
+        this.isActive = true; // Starts inactive until tab switch
         
         // Physical parameters (Sun = 1)
         this.mass = 1.0;        // Solar masses (M_sun)
@@ -177,6 +173,28 @@ class StellarSimulation {
         });
 
         // Custom Star Button
+        const selectPreset = document.getElementById("select-s-preset");
+        if (selectPreset) {
+            selectPreset.addEventListener("change", (e) => {
+                const val = e.target.value;
+                if (val === 'sun') { this.mass = 1.0; this.temp = 5778; }
+                else if (val === 'siriusA') { this.mass = 2.0; this.temp = 9940; }
+                else if (val === 'siriusB') { this.mass = 1.02; this.temp = 25200; }
+                else if (val === 'betelgeuse') { this.mass = 16.5; this.temp = 3600; }
+                else if (val === 'rigel') { this.mass = 21.0; this.temp = 12100; }
+                else if (val === 'proxima') { this.mass = 0.12; this.temp = 3042; }
+                else if (val === 'stephenson') { this.mass = 25.0; this.temp = 3200; }
+                else if (val === 'vy_canis') { this.mass = 17.0; this.temp = 3490; }
+                else if (val === 'uy_scuti') { this.mass = 10.0; this.temp = 3365; }
+                
+                this.sliderMass.value = this.mass;
+                this.numMass.value = this.mass;
+                this.sliderTemp.value = this.temp;
+                this.numTemp.value = this.temp;
+                this.updateStellarPhysics();
+            });
+        }
+
         this.btnCustomStar.addEventListener("click", () => {
             this.selectedExotic = 'custom';
             this.sliderMass.disabled = false;
@@ -246,8 +264,18 @@ class StellarSimulation {
 
     async fetchStarsDatabase() {
         try {
-            const response = await fetch('data/stars.json');
+            const response = await fetch('../data/stars.json');
             this.starsDatabase = await response.json();
+            
+            // Add custom hypergiants
+            this.starsDatabase.push({ name: "Stephenson 2-18", mass: 25.0, temp: 3200, radius: 2150.0, lum: 440000.0 });
+            this.starsDatabase.push({ name: "VY Canis Majoris", mass: 17.0, temp: 3490, radius: 1420.0, lum: 270000.0 });
+            this.starsDatabase.push({ name: "UY Scuti", mass: 10.0, temp: 3365, radius: 1708.0, lum: 340000.0 });
+            
+            // Force HR diagram update now that DB is loaded
+            if (this.updateHRDiagram) {
+                this.updateHRDiagram();
+            }
         } catch (error) {
             console.error("Erro ao carregar o banco de dados estelar:", error);
         }
@@ -309,6 +337,18 @@ class StellarSimulation {
         this.container.appendChild(this.renderer.domElement);
 
         this.clipPlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
+
+        
+        // Unreal Engine Bloom Setup
+        const renderScene = new THREE.RenderPass(this.scene, this.camera);
+        const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.4, 0.85);
+        bloomPass.threshold = 0.2;
+        bloomPass.strength = 3.0; // Glow intensity
+        bloomPass.radius = 1.0;
+
+        this.composer = new THREE.EffectComposer(this.renderer);
+        this.composer.addPass(renderScene);
+        this.composer.addPass(bloomPass);
 
         this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
@@ -883,115 +923,6 @@ class StellarSimulation {
         });
     }
 
-    drawHRDiagram() {
-        const ctx = this.hrCtx;
-        const w = this.hrCanvas.width;
-        const h = this.hrCanvas.height;
-
-        ctx.clearRect(0, 0, w, h);
-
-        // 1. Draw Grid Lines
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
-        ctx.lineWidth = 1;
-        for (let i = 1; i < 5; i++) {
-            const x = (i / 5) * w;
-            ctx.beginPath();
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, h);
-            ctx.stroke();
-
-            const y = (i / 5) * h;
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(w, y);
-            ctx.stroke();
-        }
-
-        // 2. Draw Main Sequence Corridor Gradient
-        const msGrad = ctx.createLinearGradient(0, 0, w, h);
-        msGrad.addColorStop(0, "rgba(0, 210, 255, 0.25)");   // Hot Blue
-        msGrad.addColorStop(0.5, "rgba(255, 215, 0, 0.2)"); // Solar Yellow
-        msGrad.addColorStop(1, "rgba(255, 42, 109, 0.25)");   // Cool Red
-
-        ctx.strokeStyle = msGrad;
-        ctx.lineWidth = 18;
-        ctx.lineCap = "round";
-        ctx.beginPath();
-        // A curve in 'S' shape representing the Main Sequence corridor
-        ctx.moveTo(25, 25);
-        ctx.quadraticCurveTo(w * 0.4, h * 0.5, w - 25, h - 25);
-        ctx.stroke();
-
-        // Draw Supergiants / Red Giants Branch (Top Right)
-        const giantGrad = ctx.createLinearGradient(w/2, 0, w, 0);
-        giantGrad.addColorStop(0, "rgba(255, 180, 0, 0.15)");
-        giantGrad.addColorStop(1, "rgba(255, 60, 0, 0.25)");
-        ctx.fillStyle = giantGrad;
-        ctx.beginPath();
-        ctx.ellipse(w * 0.75, h * 0.2, w * 0.2, h * 0.15, 0, 0, Math.PI*2);
-        ctx.fill();
-        ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-        ctx.font = "8px Orbitron";
-        ctx.fillText("Supergigantes", w * 0.68, h * 0.2);
-
-        // Draw White Dwarfs Branch (Bottom Left)
-        const wdGrad = ctx.createLinearGradient(0, h, w/2, h);
-        wdGrad.addColorStop(0, "rgba(200, 240, 255, 0.3)");
-        wdGrad.addColorStop(1, "rgba(255, 255, 255, 0.1)");
-        ctx.fillStyle = wdGrad;
-        ctx.beginPath();
-        ctx.ellipse(w * 0.25, h * 0.85, w * 0.15, h * 0.1, 0, 0, Math.PI*2);
-        ctx.fill();
-        ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-        ctx.fillText("Anãs Brancas", w * 0.15, h * 0.86);
-
-        // 3. Labels
-        ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-        ctx.font = "8px Orbitron";
-        ctx.fillText("40,000K", 5, h - 6);
-        ctx.fillText("O", 30, h - 6);
-        ctx.fillText("B", 70, h - 6);
-        ctx.fillText("A", 115, h - 6);
-        ctx.fillText("F", 150, h - 6);
-        ctx.fillText("G", 185, h - 6);
-        ctx.fillText("K", 225, h - 6);
-        ctx.fillText("M", 260, h - 6);
-        ctx.fillText("2,000K", w - 40, h - 6);
-
-        ctx.save();
-        ctx.translate(10, 45);
-        ctx.rotate(-Math.PI / 2);
-        ctx.fillText("LUMINOSIDADE (L/Lsun)", 0, 0);
-        ctx.restore();
-
-        // 4. Draw Current Star Indicator Marker
-        // Temperature logarithmic coordinate
-        const logTempMin = Math.log10(2000);
-        const logTempMax = Math.log10(40000);
-        const logCurrent = Math.log10(this.temp);
-        const xPct = (logTempMax - logCurrent) / (logTempMax - logTempMin);
-        const markerX = xPct * (w - 50) + 25;
-
-        // Luminosity logarithmic coordinate (L = M^3.5)
-        const logLumMin = Math.log10(Math.pow(0.1, 3.5));
-        const logLumMax = Math.log10(Math.pow(25.0, 3.5));
-        const logCurrentLum = Math.log10(this.lum);
-        const yPct = (logLumMax - logCurrentLum) / (logLumMax - logLumMin);
-        const markerY = yPct * (h - 60) + 30;
-
-        // Draw crosshair or target circle with glow
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = this.getStarHexColor();
-        ctx.fillStyle = this.getStarHexColor();
-        ctx.beginPath();
-        ctx.arc(markerX, markerY, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-    }
-
     updateStellarPhysics() {
         if (this.deathSequenceActive) return;
 
@@ -1085,6 +1016,123 @@ class StellarSimulation {
 
         this.barPP.style.width = (this.ppFraction * 100) + "%";
         this.barCNO.style.width = (this.cnoFraction * 100) + "%";
+        
+        if (this.updateHRDiagram) {
+            this.updateHRDiagram();
+        }
+    }
+
+    initHRDiagram() {
+        this.hrCanvas = document.getElementById("hr-canvas");
+        if (!this.hrCanvas) return;
+        this.hrCtx = this.hrCanvas.getContext("2d");
+        
+        // Setup high-res canvas (delay to ensure DOM layout is ready)
+        setTimeout(() => {
+            const rect = this.hrCanvas.parentElement.getBoundingClientRect();
+            this.hrCanvas.width = (rect.width > 0 ? rect.width * 2 : 600);
+            this.hrCanvas.height = (rect.height > 0 ? rect.height * 2 : 400);
+            this.hrCtx.scale(2, 2);
+            this.updateHRDiagram();
+        }, 100);
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            const rect = this.hrCanvas.parentElement.getBoundingClientRect();
+            if (rect.width > 0) {
+                this.hrCanvas.width = rect.width * 2;
+                this.hrCanvas.height = rect.height * 2;
+                this.hrCtx.scale(2, 2);
+                this.updateHRDiagram();
+            }
+        });
+    }
+
+    updateHRDiagram() {
+        if (!this.hrCtx || !this.hrCanvas) return;
+        const width = this.hrCanvas.width / 2;
+        const height = this.hrCanvas.height / 2;
+        const ctx = this.hrCtx;
+
+        ctx.clearRect(0, 0, width, height);
+
+        // Draw background regions
+        ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(40, 0); ctx.lineTo(width, height); ctx.lineTo(width - 40, height);
+        ctx.fill();
+
+        ctx.fillStyle = "rgba(0, 210, 255, 0.05)";
+        ctx.beginPath(); ctx.arc(width * 0.2, height * 0.85, 30, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "rgba(0, 210, 255, 0.4)"; ctx.font = "8px monospace"; ctx.fillText("ANÃS BRANCAS", width * 0.2 - 25, height * 0.85);
+
+        ctx.fillStyle = "rgba(255, 100, 50, 0.05)";
+        ctx.beginPath(); ctx.arc(width * 0.85, height * 0.3, 40, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "rgba(255, 100, 50, 0.4)"; ctx.fillText("GIGANTES", width * 0.85 - 20, height * 0.3);
+
+        ctx.fillStyle = "rgba(255, 50, 50, 0.05)";
+        ctx.beginPath(); ctx.arc(width * 0.5, height * 0.1, 40, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "rgba(255, 50, 50, 0.4)"; ctx.fillText("SUPERGIGANTES", width * 0.5 - 30, height * 0.1);
+
+        // Plot background stars from database
+        if (this.starsDatabase && this.starsDatabase.length > 0) {
+            ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+            for (let i = 0; i < this.starsDatabase.length; i += 15) {
+                const s = this.starsDatabase[i];
+                if (!s || !s.temp || !s.lum) continue;
+                const slT = Math.log10(Math.max(2500, Math.min(s.temp, 40000)));
+                const slL = Math.log10(Math.max(1e-4, Math.min(s.lum, 1e6)));
+                const sx = width * (1 - (slT - 3.4) / (4.6 - 3.4));
+                const sy = height * (1 - (slL - (-4)) / (6 - (-4)));
+                
+                if (s.temp > 10000) ctx.fillStyle = "rgba(100, 200, 255, 0.5)";
+                else if (s.temp > 6000) ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+                else if (s.temp > 4000) ctx.fillStyle = "rgba(255, 200, 100, 0.4)";
+                else ctx.fillStyle = "rgba(255, 100, 50, 0.5)";
+                
+                ctx.fillRect(sx, sy, 1, 1);
+            }
+        }
+
+        // Draw axes and grid lines
+        ctx.strokeStyle = "rgba(0, 210, 255, 0.15)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for(let i=1; i<5; i++) {
+            ctx.moveTo(0, height * (i/5)); ctx.lineTo(width, height * (i/5));
+            ctx.moveTo(width * (i/5), 0); ctx.lineTo(width * (i/5), height);
+        }
+        ctx.stroke();
+
+        ctx.strokeStyle = "rgba(0, 210, 255, 0.5)";
+        ctx.beginPath();
+        ctx.moveTo(0, height - 1); ctx.lineTo(width, height - 1);
+        ctx.moveTo(1, 0); ctx.lineTo(1, height);
+        ctx.stroke();
+
+        // Draw CURRENT Star
+        const logT = Math.log10(Math.max(2500, Math.min(this.temp, 40000)));
+        const logL = Math.log10(Math.max(1e-4, Math.min(this.lum, 1e6)));
+        const x = width * (1 - (logT - 3.4) / (4.6 - 3.4));
+        const y = height * (1 - (logL - (-4)) / (6 - (-4)));
+
+        let hexColor = 0xffffff;
+        if (this.starMat && this.starMat.uniforms && this.starMat.uniforms.u_color) {
+            hexColor = this.starMat.uniforms.u_color.value.getHex();
+        } else if (this.temp > 10000) hexColor = 0xaaccff;
+        else if (this.temp < 4000) hexColor = 0xff8844;
+
+        ctx.shadowColor = "#" + hexColor.toString(16).padStart(6, '0');
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "10px monospace";
+        ctx.fillText("SISTEMA ATUAL", x + 10, y + 4);
     }
 
     createMagneticLoops() {
@@ -1288,7 +1336,7 @@ class StellarSimulation {
     }
 
     pause() {
-        this.isActive = false;
+        this.isActive = true;
     }
 
     resume() {
@@ -1393,7 +1441,7 @@ class StellarSimulation {
         }
 
         // Draw the HR Diagram at 30 FPS or when active
-        this.drawHRDiagram();
+        
 
         // Gentle pulse on main sequence
         if (this.state === 'main_sequence') {
@@ -1407,7 +1455,11 @@ class StellarSimulation {
             this.coronaMat.uniforms.u_coronaRadius.value = 3.0 * this.coronaMesh.scale.x;
         }
 
-        this.renderer.render(this.scene, this.camera);
+        if (this.composer) {
+            this.composer.render();
+        } else {
+            this.renderer.render(this.scene, this.camera);
+        }
     }
 
     animateInternalLayers() {
