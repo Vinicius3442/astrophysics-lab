@@ -173,27 +173,7 @@ class StellarSimulation {
         });
 
         // Custom Star Button
-        const selectPreset = document.getElementById("select-s-preset");
-        if (selectPreset) {
-            selectPreset.addEventListener("change", (e) => {
-                const val = e.target.value;
-                if (val === 'sun') { this.mass = 1.0; this.temp = 5778; }
-                else if (val === 'siriusA') { this.mass = 2.0; this.temp = 9940; }
-                else if (val === 'siriusB') { this.mass = 1.02; this.temp = 25200; }
-                else if (val === 'betelgeuse') { this.mass = 16.5; this.temp = 3600; }
-                else if (val === 'rigel') { this.mass = 21.0; this.temp = 12100; }
-                else if (val === 'proxima') { this.mass = 0.12; this.temp = 3042; }
-                else if (val === 'stephenson') { this.mass = 25.0; this.temp = 3200; }
-                else if (val === 'vy_canis') { this.mass = 17.0; this.temp = 3490; }
-                else if (val === 'uy_scuti') { this.mass = 10.0; this.temp = 3365; }
-                
-                this.sliderMass.value = this.mass;
-                this.numMass.value = this.mass;
-                this.sliderTemp.value = this.temp;
-                this.numTemp.value = this.temp;
-                this.updateStellarPhysics();
-            });
-        }
+
 
         this.btnCustomStar.addEventListener("click", () => {
             this.selectedExotic = 'custom';
@@ -236,7 +216,9 @@ class StellarSimulation {
                     div.style.fontSize = "0.8rem";
                     
                     const typeDisplay = star.type ? star.type : `${star.temp}K • ${star.mass} M☉`;
-                    div.innerHTML = `<strong style="color:var(--accent-cyan);">${star.name}</strong><br><span style="color:var(--text-secondary); font-size:0.7rem;">${typeDisplay}</span>`;
+                    const lumDisplay = (star.lum && star.lum > 1000) ? ` • ${(star.lum/1000).toFixed(0)}k L☉` 
+                                     : (star.lum && star.lum > 0) ? ` • ${star.lum.toFixed(3)} L☉` : '';
+                    div.innerHTML = `<strong style="color:var(--accent-cyan);">${star.name}</strong><br><span style="color:var(--text-secondary); font-size:0.7rem;">${typeDisplay}${lumDisplay}</span>`;
                     
                     // Hover effect
                     div.addEventListener("mouseenter", () => div.style.background = "rgba(0, 245, 212, 0.15)");
@@ -266,11 +248,6 @@ class StellarSimulation {
         try {
             const response = await fetch('../data/stars.json');
             this.starsDatabase = await response.json();
-            
-            // Add custom hypergiants
-            this.starsDatabase.push({ name: "Stephenson 2-18", mass: 25.0, temp: 3200, radius: 2150.0, lum: 440000.0 });
-            this.starsDatabase.push({ name: "VY Canis Majoris", mass: 17.0, temp: 3490, radius: 1420.0, lum: 270000.0 });
-            this.starsDatabase.push({ name: "UY Scuti", mass: 10.0, temp: 3365, radius: 1708.0, lum: 340000.0 });
             
             // Force HR diagram update now that DB is loaded
             if (this.updateHRDiagram) {
@@ -303,9 +280,17 @@ class StellarSimulation {
             this.numTemp.disabled = true;
 
             // Update radius/lum for massive giants to override standard formula
-            if (star.radius > 0) {
+            if (star.lum && star.lum > 0) {
+                this.lum = star.lum;
+                // Also set radius if provided, otherwise derive from L and T
+                if (star.radius && star.radius > 0) {
+                    this.radius = star.radius;
+                } else {
+                    const tempRatio = this.temp / 5778;
+                    this.radius = Math.sqrt(this.lum) / (tempRatio * tempRatio);
+                }
+            } else if (star.radius && star.radius > 0) {
                 this.radius = star.radius;
-                // Luminosity approx from radius and temp
                 const tempRatio = this.temp / 5778;
                 this.lum = (this.radius * this.radius) * Math.pow(tempRatio, 4);
             } else {

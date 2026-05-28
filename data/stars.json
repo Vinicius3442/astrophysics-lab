@@ -941878,5 +941878,160 @@
         "temp": 3652,
         "radius": 0.132,
         "lum": 0.003
+    },
+    {
+        "id": "stephenson_2_18",
+        "name": "Stephenson 2-18",
+        "type": "Hipergigante Vermelha (RSG)",
+        "mass": 25,
+        "temp": 3200,
+        "radius": 2150,
+        "lum": 440000,
+        "tags": [
+            "hipergigante",
+            "gigante vermelha",
+            "stephenson",
+            "maior estrela",
+            "supergigante"
+        ]
+    },
+    {
+        "id": "vy_canis_majoris",
+        "name": "VY Canis Majoris",
+        "type": "Hipergigante Vermelha Hipermaciça",
+        "mass": 17,
+        "temp": 3490,
+        "radius": 1420,
+        "lum": 300000,
+        "tags": [
+            "hipergigante",
+            "vy canis",
+            "supergigante vermelha",
+            "canis majoris"
+        ]
+    },
+    {
+        "id": "uy_scuti",
+        "name": "UY Scuti",
+        "type": "Supergigante Vermelha (RSG)",
+        "mass": 10,
+        "temp": 3365,
+        "radius": 1708,
+        "lum": 340000,
+        "tags": [
+            "hipergigante",
+            "uy scuti",
+            "supergigante vermelha",
+            "maior raio"
+        ]
+    },
+    {
+        "id": "sirius_b",
+        "name": "Sirius B",
+        "type": "Anã Branca (DA2)",
+        "mass": 1.02,
+        "temp": 25200,
+        "radius": 0.0084,
+        "lum": 0.0024,
+        "tags": [
+            "anã branca",
+            "sirius",
+            "sirius b",
+            "white dwarf",
+            "compacta"
+        ]
+    },
+    {
+        "id": "procyon_b",
+        "name": "Procyon B",
+        "type": "Anã Branca (DQZ)",
+        "mass": 0.6,
+        "temp": 7740,
+        "radius": 0.0096,
+        "lum": 0.00049,
+        "tags": [
+            "anã branca",
+            "procyon",
+            "procyon b",
+            "white dwarf"
+        ]
+    },
+    {
+        "id": "40_eridani_b",
+        "name": "40 Eridani B (Omicron²)",
+        "type": "Anã Branca (DA4)",
+        "mass": 0.573,
+        "temp": 16500,
+        "radius": 0.0136,
+        "lum": 0.013,
+        "tags": [
+            "anã branca",
+            "40 eridani",
+            "eridani b",
+            "white dwarf",
+            "omicron"
+        ]
+    },
+    {
+        "id": "van_maanen_2",
+        "name": "Van Maanen 2",
+        "type": "Anã Branca (DZ8)",
+        "mass": 0.68,
+        "temp": 6220,
+        "radius": 0.011,
+        "lum": 0.00017,
+        "tags": [
+            "anã branca",
+            "van maanen",
+            "white dwarf",
+            "mais próxima anã branca"
+        ]
+    },
+    {
+        "id": "wd_1856",
+        "name": "WD 1856+534",
+        "type": "Anã Branca com Exoplaneta",
+        "mass": 0.518,
+        "temp": 4710,
+        "radius": 0.0131,
+        "lum": 0.00018,
+        "tags": [
+            "anã branca",
+            "WD 1856",
+            "white dwarf",
+            "exoplaneta"
+        ]
+    },
+    {
+        "id": "eta_carinae",
+        "name": "Eta Carinae",
+        "type": "Hipergigante Luminosa Azul (LBV)",
+        "mass": 100,
+        "temp": 35000,
+        "radius": 180,
+        "lum": 4600000,
+        "tags": [
+            "lbv",
+            "hipergigante azul",
+            "eta carinae",
+            "luminosa variável azul",
+            "supergigante"
+        ]
+    },
+    {
+        "id": "r136a1",
+        "name": "R136a1",
+        "type": "Estrela Wolf-Rayet de Primeira Magnitude",
+        "mass": 196,
+        "temp": 46000,
+        "radius": 28.8,
+        "lum": 8700000,
+        "tags": [
+            "r136a1",
+            "wolf-rayet",
+            "mais massiva",
+            "grande nuvem de magalhães",
+            "hipergigante"
+        ]
     }
 ]
